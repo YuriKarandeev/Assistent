@@ -86,6 +86,9 @@
   }
   header h1 { font-size: 15px; margin: 0; font-weight: 600; white-space: nowrap; }
   header .spacer { flex: 1; }
+  /* Кнопка «Помощник» стоит сразу после плашки: на узком экране шапка
+     переносится, но кнопка остаётся рядом с заголовком */
+  #btnAssistant { padding: 5px 9px; line-height: 1; font-size: 14px; }
   .tabs {
     display: flex;
     gap: 4px;
@@ -1161,6 +1164,24 @@
     align-items: center;
   }
   .chat-hint button { font-size: 11px; }
+  /* Плашка голосового режима: видно, слушает ли микрофон и сколько осталось
+     до отправки. Без неё непонятно, почему сообщение ушло само. */
+  .voice-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel-2, rgba(255, 255, 255, 0.04));
+    font-size: 12px;
+    color: var(--text);
+  }
+  .voice-hint[hidden] { display: none; }
+  .voice-hint.armed { border-color: var(--warn); }
+  .voice-hint button { font-size: 11px; }
   .msg-speak {
     margin-top: 4px;
     padding: 2px 6px;
@@ -1274,6 +1295,7 @@
   @media (max-width: 640px) {
     header { gap: 8px; padding: calc(8px + var(--safe-top)) 12px 8px; }
     header h1 { font-size: 14px; }
+    #btnAssistant { padding: 4px 7px; font-size: 13px; }
     .theme-toggle .opt { padding: 5px 8px; font-size: 11px; }
     .header-actions button { padding: 6px 10px; font-size: 12px; }
     main { padding: 12px 12px calc(12px + var(--safe-bottom)); }
@@ -1359,6 +1381,8 @@
 
 <header>
   <h1>🎯 Личный ассистент</h1>
+  <button class="ghost mini" id="btnAssistant" onclick="window.openAssistant()"
+    title="Открыть помощника" aria-label="Открыть помощника">💬</button>
   <div class="spacer"></div>
   <div class="header-actions">
     <span class="sync-badge" id="syncBadge" title="Статус синхронизации">
@@ -1380,8 +1404,8 @@
   <div class="tab" data-view="calendar">Календарь</div>
   <div class="tab" data-view="deals">Дела</div>
   <div class="tab" data-view="hobbies">Увлечения</div>
-  <div class="tab" data-view="chat">Помощник</div>
   <div class="tab active" data-view="health">Здоровье</div>
+  <div class="tab" data-view="chat">Помощник</div>
 </div>
 
 <main>
@@ -1475,6 +1499,11 @@
         <button type="button" class="mic" id="micBtn" title="Сказать голосом" aria-label="Диктовка">🎤</button>
         <button type="submit" title="Отправить">➤</button>
       </form>
+      <div class="voice-hint" id="voiceHint" hidden>
+        <span id="voiceHintText">Слушаю…</span>
+        <button type="button" class="ghost mini" id="voiceHintBtn"
+          onclick="window.voiceHintAction()">Отменить</button>
+      </div>
       <div class="chat-hint">
         <button type="button" class="ghost mini" id="voiceToggle" aria-pressed="false"
           onclick="window.toggleSpeakReplies()">🔊 Озвучка выключена</button>
@@ -1556,6 +1585,25 @@
       <button class="ghost" onclick="window.saveAiKey()">Сохранить ключ</button>
       <button class="ghost" onclick="window.clearAiKey()">Удалить ключ</button>
     </div>
+
+    <div class="data-note" style="margin-top:14px;">
+      Голос помощника. «Джарвис-стиль» — это низкий мужской русский голос чуть медленнее
+      обычного; настоящего голоса Джарвиса в системе нет, поэтому звучание зависит от
+      голосов, установленных на устройстве. На iPhone мужской голос скачивается в
+      Настройки → Универсальный доступ → Контент и чтение → Голоса → Русский → «Юрий».
+    </div>
+    <div class="data-row">
+      <select id="voiceProfile" style="flex:1;min-width:150px;" onchange="window.setVoiceProfile(this.value)">
+        <option value="calm">Спокойный</option>
+        <option value="jarvis">Джарвис-стиль (низкий мужской)</option>
+      </select>
+      <button class="ghost" onclick="window.previewVoice()">▶ Прослушать</button>
+    </div>
+    <div class="data-note" id="voiceProfileHint" style="margin-top:8px;"></div>
+    <label class="check" style="margin-top:8px;">
+      <input type="checkbox" id="voiceAutoSend" onchange="window.setVoiceAutoSend(this.checked)">
+      Отправлять по слову «отправить» (после паузы)
+    </label>
 
     <div class="data-btns">
       <button class="ghost mini" onclick="window.checkCloudNow()">Проверить связь</button>
@@ -2280,8 +2328,8 @@ function applyMobileTabOrder() {
   const isMobile = window.matchMedia('(max-width: 640px)').matches;
   const tabsEl = document.getElementById('mainTabs');
   const tabs = [...tabsEl.querySelectorAll('.tab')];
-  const mobileOrder = ['health', 'kanban', 'deals', 'calendar', 'chat', 'hobbies'];
-  const desktopOrder = ['kanban', 'calendar', 'deals', 'hobbies', 'chat', 'health'];
+  const mobileOrder = ['health', 'kanban', 'deals', 'calendar', 'hobbies', 'chat'];
+  const desktopOrder = ['kanban', 'calendar', 'deals', 'hobbies', 'health', 'chat'];
   const order = isMobile ? mobileOrder : desktopOrder;
   order.forEach(name => {
     const t = tabs.find(x => x.dataset.view === name);
@@ -2335,19 +2383,42 @@ const MONTH_SHORT = ['янв','фев','мар','апр','май','июн','ию
 /* ============================================================
    ВКЛАДКИ
    ============================================================ */
+/* Переключение вынесено в функцию: его вызывают и табы, и кнопка 💬 в шапке.
+   Раньше логика жила в анонимном обработчике, поэтому открыть чат из шапки
+   было нечем. */
+function switchView(name) {
+  const tab = document.querySelector('.tab[data-view="' + name + '"]');
+  const panel = document.getElementById('view-' + name);
+  if (!tab || !panel) return false;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  tab.classList.add('active');
+  panel.classList.add('active');
+  if (name === 'kanban') renderKanban();
+  if (name === 'calendar') { renderCalendar(); renderUpcoming(); }
+  if (name === 'deals') renderDeals();
+  if (name === 'hobbies') renderHobbies();
+  if (name === 'health') { renderHealth(); drawHealthChart(); }
+  if (name === 'chat') renderChat();
+  return true;
+}
+window.switchView = switchView;
+
 document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById('view-' + tab.dataset.view).classList.add('active');
-    if (tab.dataset.view === 'kanban') renderKanban();
-    if (tab.dataset.view === 'calendar') { renderCalendar(); renderUpcoming(); }
-    if (tab.dataset.view === 'deals') renderDeals();
-    if (tab.dataset.view === 'hobbies') renderHobbies();
-    if (tab.dataset.view === 'health') { renderHealth(); drawHealthChart(); }
-  });
+  tab.addEventListener('click', () => switchView(tab.dataset.view));
 });
+
+/* Кнопка «Помощник» рядом с плашкой: сразу открывает чат и ставит курсор
+   в поле ввода. На тач-устройствах фокус не ставим — иначе выезжает
+   клавиатура и закрывает половину экрана. */
+window.openAssistant = function () {
+  switchView('chat');
+  const log = document.getElementById('chatLog');
+  if (log) log.scrollTop = log.scrollHeight;
+  const input = document.getElementById('chatInput');
+  const desktop = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+  if (input && desktop) input.focus();
+};
 
 /* ============================================================
    КАНБАН
@@ -4119,7 +4190,17 @@ let aiLastError = null;   // { code, at } — попадает в диагнос
 let voiceSettings = voice.loadSettings(localStorage);
 let voiceRec = null;        // контроллер идущей записи, пока микрофон слушает
 let voiceBase = '';         // текст, который был в поле до начала диктовки
+let voiceDraft = '';        // распознанный в этой сессии текст (без voiceBase)
 let voiceLastError = null;
+/* Голосовая отправка: распознали «отправить» → ждём тишину sendDelay мс.
+   Пока armed, плашка показывает обратный отсчёт, кнопка «Отменить» снимает его. */
+let voiceArmed = false;
+let voiceSendTimer = null;
+let voiceTickTimer = null;
+let voiceSendLeft = 0;
+let voiceAutoListen = false;  // продолжать слушать после отправки
+let voiceRestartTimer = null;
+let voiceEmptyEnds = 0;       // сколько раз подряд сессия закончилась без речи
 
 function aiTyping() {
   const log = document.getElementById('chatLog');
@@ -4247,6 +4328,35 @@ function resizeChatInput() {
   input.style.height = Math.min(input.scrollHeight, 140) + 'px';
 }
 
+/* Единая точка отправки: Enter, кнопка ➤ и голосовая команда «отправить»
+   должны идти одним путём — иначе голос обходил бы проверку входа. */
+function submitChat() {
+  const input = document.getElementById('chatInput');
+  if (!input) return false;
+  const text = input.value.trim();
+  if (!text) return false;
+  if (!currentUser) {
+    toast('Сначала войдите через Google — иначе сообщение не сохранится', 'bad');
+    return false;
+  }
+  /* Пока модель отвечает, второе сообщение отправить нельзя: иначе текст
+     исчезнет из поля, а askAssistant молча откажется. */
+  if (aiBusy) {
+    toast('Помощник ещё отвечает — дождитесь ответа', 'bad');
+    return false;
+  }
+  addMessage('user', text);
+  input.value = '';
+  voiceBase = '';
+  voiceDraft = '';
+  resizeChatInput();
+  const desktop = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+  if (desktop) input.focus();
+  askAssistant(text);
+  return true;
+}
+window.submitChat = submitChat;
+
 function initChat() {
   const form = document.getElementById('chatForm');
   const input = document.getElementById('chatInput');
@@ -4264,17 +4374,7 @@ function initChat() {
 
   form.addEventListener('submit', e => {
     e.preventDefault();
-    const text = input.value.trim();
-    if (!text) return;
-    if (!currentUser) {
-      toast('Сначала войдите через Google — иначе сообщение не сохранится', 'bad');
-      return;
-    }
-    addMessage('user', text);
-    input.value = '';
-    resize();
-    input.focus();
-    askAssistant(text);
+    submitChat();
   });
 }
 
@@ -4299,13 +4399,121 @@ function updateVoiceUi() {
       ? 'Ответы помощника читаются вслух — нажмите, чтобы выключить'
       : 'Читать ответы помощника вслух';
   }
+  const profile = document.getElementById('voiceProfile');
+  if (profile && profile.value !== voiceSettings.profile) profile.value = voiceSettings.profile;
+  const auto = document.getElementById('voiceAutoSend');
+  if (auto) auto.checked = voiceSettings.autoSend !== false;
+  const hint = document.getElementById('voiceProfileHint');
+  if (hint) hint.textContent = voiceProfileHintText();
 }
 
-/* Диктовка: распознанный текст дописывается в поле, но НЕ отправляется сам.
-   Ошибка распознавания не должна создавать запись «не то, что сказали». */
+/* Что реально звучит сейчас: профиль — это пресет, а голос берётся из системы.
+   Если мужского русского голоса нет, честно пишем это в 💾. */
+function voiceProfileHintText() {
+  if (!voice.canSpeak(window)) return 'Этот браузер не умеет озвучивать текст.';
+  const picked = voice.pickVoice(voice.listVoices(window), voiceSettings.voiceURI, voiceSettings.gender);
+  if (!picked) return 'Русский голос не найден: добавьте его в настройках системы.';
+  const name = picked.name || 'без имени';
+  if (voiceSettings.gender === 'male' && !voice.VOICE_MALE_NAMES.test(name)) {
+    return 'Сейчас звучит «' + name + '» — мужской русский голос не найден.';
+  }
+  return 'Сейчас звучит «' + name + '».';
+}
+
+const VOICE_PREVIEW_TEXT = 'Добрый вечер. Я на связи и готов помочь.';
+
+/* Профиль — это пресет скорости и высоты голоса. Сохраняем сразу: настройки
+   устройства, в state и Firestore они не идут. */
+window.setVoiceProfile = function (value) {
+  const preset = voice.profileSettings(value);
+  voiceSettings = Object.assign({}, voiceSettings, preset);
+  if (!voice.saveSettings(voiceSettings, localStorage)) {
+    toast('Не удалось сохранить настройку: браузер не дал доступ к localStorage', 'bad');
+  }
+  updateVoiceUi();
+  renderDiag();
+  if (!voice.speak(VOICE_PREVIEW_TEXT, voiceSettings)) {
+    toast('Профиль сохранён, но озвучить не удалось — проверьте голоса в системе', 'bad');
+  }
+};
+
+/* Кнопка «Прослушать»: заодно даёт жест, которого iOS требует для первого speak. */
+window.previewVoice = function () {
+  if (!voice.canSpeak(window)) {
+    toast('Этот браузер не умеет озвучивать текст', 'bad');
+    return;
+  }
+  if (!voice.speak(VOICE_PREVIEW_TEXT, voiceSettings)) {
+    toast('Не удалось озвучить — проверьте голоса в системе', 'bad');
+  }
+};
+
+window.setVoiceAutoSend = function (checked) {
+  voiceSettings = Object.assign({}, voiceSettings, { autoSend: checked === true });
+  if (!voice.saveSettings(voiceSettings, localStorage)) {
+    toast('Не удалось сохранить настройку: браузер не дал доступ к localStorage', 'bad');
+  }
+  if (!voiceSettings.autoSend) cancelVoiceSend('');
+  updateVoiceUi();
+};
+
+/* ---------- Голосовая плашка ---------- */
+/* Одна плашка на все состояния: «слушаю», «отправлю через N», «нажмите ⏹».
+   Пока она видна, пользователь понимает, что микрофон ещё открыт. */
+function showVoiceHint(text, cancelable, armed) {
+  const box = document.getElementById('voiceHint');
+  const label = document.getElementById('voiceHintText');
+  const btn = document.getElementById('voiceHintBtn');
+  if (!box || !label) return;
+  box.hidden = false;
+  box.classList.toggle('armed', armed === true);
+  label.textContent = text;
+  if (btn) {
+    btn.hidden = cancelable === false;
+    btn.textContent = armed ? 'Отменить' : 'Стоп';
+  }
+}
+
+function hideVoiceHint() {
+  const box = document.getElementById('voiceHint');
+  if (box) box.hidden = true;
+}
+
+/* Состояние прослушивания в подсказке зависит от настройки автоотправки:
+   обещать «скажите отправить», когда она выключена, — обманывать. */
+function voiceListeningHint() {
+  return voiceSettings.autoSend
+    ? 'Слушаю… скажите «отправить», и сообщение уйдёт после паузы'
+    : 'Слушаю… нажмите ⏹, когда закончите';
+}
+
+function stopVoice() {
+  voiceAutoListen = false;
+  clearTimeout(voiceRestartTimer);
+  clearVoiceSendTimer();
+  if (voiceRec) {
+    voiceRec.stop();
+    return;
+  }
+  hideVoiceHint();
+  updateVoiceUi();
+}
+
+/* Кнопка в плашке: в режиме ожидания — отмена отправки, иначе — стоп записи. */
+window.voiceHintAction = function () {
+  if (voiceArmed) {
+    cancelVoiceSend('Отправка отменена');
+    return;
+  }
+  stopVoice();
+};
+
+/* Диктовка: распознанный текст дописывается в поле. Отправляет только
+   отдельная команда «отправить» (и только после паузы) — чтобы случайно
+   сказанное слово не улетело помощнику. */
 window.toggleDictation = function () {
   if (voiceRec) {
-    voiceRec.stop();  // onend снимет значок и обнулит voiceRec
+    stopVoice();
     return;
   }
   const input = document.getElementById('chatInput');
@@ -4315,35 +4523,190 @@ window.toggleDictation = function () {
     return;
   }
   voiceBase = input.value;
+  voiceDraft = '';
   voiceLastError = null;
+  voiceEmptyEnds = 0;
+  voiceAutoListen = true;
+  listenOnce();
+  if (voiceRec) showVoiceHint(voiceListeningHint(), true, false);
+};
+
+/* Одна сессия распознавания. continuous: true нужен, чтобы после «отправить»
+   дождаться паузы, а не обрывать запись на первой же тишине. */
+function listenOnce() {
+  if (voiceRec) return;
+  /* Пока помощник отвечает, микрофон не открываем: иначе «отправить» упрётся
+     в занятый чат, а пользователь решит, что голос не работает. */
+  if (aiBusy) {
+    voiceAutoListen = false;
+    hideVoiceHint();
+    toast('Помощник ещё отвечает — дождитесь ответа', 'bad');
+    return;
+  }
+  const field = document.getElementById('chatInput');
+  if (field) {
+    voiceBase = field.value;
+    voiceDraft = '';
+  }
   const controller = voice.recognize(window, {
-    onResult: result => {
-      const field = document.getElementById('chatInput');
-      if (!field) return;
-      field.value = voice.composeText(voiceBase, result.final, result.interim);
-      resizeChatInput();
-    },
-    onError: (code, message) => {
-      voiceLastError = { code: code, at: new Date().toISOString() };
-      toast(message, 'bad');
-    },
+    onResult: handleVoiceResult,
+    onError: handleVoiceError,
     onUnsupported: () => {
       voiceLastError = { code: 'unsupported', at: new Date().toISOString() };
+      voiceAutoListen = false;
+      hideVoiceHint();
       toast('Этот браузер не умеет распознавать речь', 'bad');
     },
-    onEnd: () => {
-      voiceRec = null;
-      updateVoiceUi();
-      const field = document.getElementById('chatInput');
-      if (field) field.focus();
-      renderDiag();
-    }
-  });
+    onEnd: handleVoiceEnd
+  }, { continuous: true });
   voiceRec = controller;
   updateVoiceUi();
-  if (controller) toast('Слушаю… нажмите ⏹, когда закончите', 'ok');
   renderDiag();
-};
+  if (!controller) {
+    voiceAutoListen = false;
+    hideVoiceHint();
+  }
+}
+
+/* Разбор распознанного. Команда «отправить» понимается только в конце фразы:
+   «отправь письмо Пете» — это текст, «купить молоко отправить» — текст плюс команда. */
+function handleVoiceResult(result) {
+  const field = document.getElementById('chatInput');
+  if (!field || !result) return;
+  if (result.final) {
+    voiceEmptyEnds = 0;
+    if (voice.isCancelCommand(result.final)) {
+      cancelVoiceSend('Отправка отменена');
+      return;
+    }
+    const parsed = voice.splitSendCommand(result.final);
+    if (parsed.send) {
+      voiceDraft = voice.composeText(voiceDraft, parsed.rest, '');
+      field.value = voice.composeText(voiceBase, voiceDraft, '');
+      resizeChatInput();
+      if (!field.value.trim()) {
+        toast('Нечего отправлять: сначала продиктуйте текст', 'bad');
+        return;
+      }
+      if (!voiceSettings.autoSend) {
+        toast('Автоотправка выключена — нажмите ➤', 'ok');
+        return;
+      }
+      armVoiceSend();
+      return;
+    }
+    voiceDraft = voice.composeText(voiceDraft, result.final, '');
+  }
+  field.value = voice.composeText(voiceBase, voiceDraft, result.interim);
+  resizeChatInput();
+  if (voiceArmed) {
+    /* Пользователь продолжил говорить — значит ещё не закончил: отсчёт заново. */
+    armVoiceSend();
+    return;
+  }
+  showVoiceHint(voiceListeningHint(), true, false);
+}
+
+function handleVoiceError(code, message) {
+  voiceLastError = { code: code, at: new Date().toISOString() };
+  renderDiag();
+  if (code === 'aborted') return;
+  if (code === 'no-speech') {
+    voiceEmptyEnds += 1;
+    /* В окне ожидания тишина — это и есть подтверждение: таймер отправит сам. */
+    if (voiceArmed) return;
+    if (voiceEmptyEnds >= 2) {
+      voiceAutoListen = false;
+      clearVoiceSendTimer();
+      hideVoiceHint();
+      updateVoiceUi();
+      toast('Ничего не слышно — диктовка остановлена', 'bad');
+    }
+    return;
+  }
+  toast(message, 'bad');
+  if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture' ||
+    code === 'network' || code === 'language-not-supported' || code === 'busy') {
+    voiceAutoListen = false;
+    clearVoiceSendTimer();
+    hideVoiceHint();
+    updateVoiceUi();
+  }
+}
+
+function handleVoiceEnd() {
+  voiceRec = null;
+  updateVoiceUi();
+  renderDiag();
+  /* Окно подтверждения идёт своим таймером: перезапуск микрофона не нужен. */
+  if (voiceArmed) return;
+  const chat = document.getElementById('view-chat');
+  if (voiceAutoListen && chat && chat.classList.contains('active')) {
+    restartListening();
+    return;
+  }
+  hideVoiceHint();
+}
+function restartListening() {
+  clearTimeout(voiceRestartTimer);
+  voiceRestartTimer = setTimeout(() => {
+    if (!voiceRec && voiceAutoListen) listenOnce();
+  }, 350);
+}
+
+function clearVoiceSendTimer() {
+  clearTimeout(voiceSendTimer);
+  clearInterval(voiceTickTimer);
+  voiceSendTimer = null;
+  voiceTickTimer = null;
+  voiceArmed = false;
+  const box = document.getElementById('voiceHint');
+  if (box) box.classList.remove('armed');
+}
+
+/* «Отправить» → окно sendDelay мс. Тишина истекла — сообщение уходит.
+   Любое новое слово перезапускает окно, «отмена»/«нет»/«стоп» — снимает его. */
+function armVoiceSend() {
+  clearTimeout(voiceSendTimer);
+  clearInterval(voiceTickTimer);
+  voiceArmed = true;
+  voiceSendLeft = Math.ceil(voiceSettings.sendDelay / 1000);
+  const paint = () => showVoiceHint('Отправлю через ' + voiceSendLeft + '… · скажите «отмена», чтобы передумать', true, true);
+  paint();
+  voiceTickTimer = setInterval(() => {
+    voiceSendLeft = Math.max(0, voiceSendLeft - 1);
+    paint();
+  }, 1000);
+  voiceSendTimer = setTimeout(() => {
+    clearInterval(voiceTickTimer);
+    voiceTickTimer = null;
+    voiceSendTimer = null;
+    voiceArmed = false;
+    sendVoiceMessage();
+  }, voiceSettings.sendDelay);
+}
+
+function cancelVoiceSend(message) {
+  clearVoiceSendTimer();
+  if (message) toast(message, 'ok');
+  if (voiceRec) showVoiceHint(voiceListeningHint(), true, false);
+  else hideVoiceHint();
+}
+
+function sendVoiceMessage() {
+  const sent = submitChat();
+  if (!sent) {
+    stopVoice();
+    return;
+  }
+  voiceDraft = '';
+  if (voiceAutoListen) {
+    showVoiceHint('Отправлено. ' + voiceListeningHint(), true, false);
+    if (!voiceRec) restartListening();
+  } else {
+    hideVoiceHint();
+  }
+}
 
 /* Озвучка ответов: по умолчанию выключена, чтобы приложение не заговорило само.
    При включении сразу говорим пробную фразу — это и проверка голоса, и жест,
@@ -4389,6 +4752,12 @@ function initVoice() {
   }
   const toggle = document.getElementById('voiceToggle');
   if (toggle && !voice.canSpeak(window)) toggle.style.display = 'none';
+  /* iOS отдаёт голоса асинхронно: до voiceschanged подсказка в 💾 сказала бы
+     «русский голос не найден», хотя он есть. */
+  voice.whenVoicesReady(window, () => {
+    updateVoiceUi();
+    renderDiag();
+  });
   updateVoiceUi();
 }
 

@@ -20,15 +20,40 @@ export const VOICE_LANG = 'ru-RU';
 export const VOICE_DEFAULT_RATE = 1;
 export const VOICE_MIN_RATE = 0.5;
 export const VOICE_MAX_RATE = 2;
+export const VOICE_DEFAULT_PITCH = 1;
+export const VOICE_MIN_PITCH = 0;
+export const VOICE_MAX_PITCH = 2;
 /* Длинную простыню помощника вслух слушать невозможно: режем по границе слова. */
 export const VOICE_MAX_SPEECH = 600;
+/* Сколько тишины после слова «отправить» считается подтверждением отправки. */
+export const VOICE_SEND_WINDOW_MS = 2000;
+
+/* Профили озвучки — это пресеты, а не отдельные голоса: Web Speech API играет
+   только системными голосами устройства. «Джарвис-стиль» = низкий мужской
+   русский голос, чуть медленнее обычного. Настоящего голоса Джарвиса в системе
+   нет и подставить его нельзя — см. memory-bank/systemPatterns.md. */
+export const VOICE_PROFILES = {
+  calm: { id: 'calm', title: 'Спокойный', rate: 1, pitch: 1, gender: '' },
+  jarvis: { id: 'jarvis', title: 'Джарвис-стиль', rate: 0.95, pitch: 0.7, gender: 'male' }
+};
+export const VOICE_PROFILE_IDS = Object.keys(VOICE_PROFILES);
+
+/* Имена русских мужских голосов в Windows, macOS и iOS. Полного списка не
+   существует, поэтому это эвристика: не нашли — берём обычный русский голос. */
+export const VOICE_MALE_NAMES =
+  /(yuri|юр(ий|ия)|dmitry|дмитри|pavel|павел|aleksandr|alexander|александр|artem|арт(е|ё)м|maxim|максим|ivan|иван)/i;
 
 /* По умолчанию озвучка выключена: приложение не должно внезапно заговорить,
    к тому же на iOS первый speak обязан идти из жеста пользователя. */
 export const DEFAULT_SETTINGS = {
   speakReplies: false,
   rate: VOICE_DEFAULT_RATE,
-  voiceURI: ''
+  pitch: VOICE_DEFAULT_PITCH,
+  profile: 'calm',
+  gender: '',
+  voiceURI: '',
+  autoSend: true,
+  sendDelay: VOICE_SEND_WINDOW_MS
 };
 
 /* Русские причины вместо кодов Web Speech API: пользователю нужно понимать,
@@ -69,12 +94,58 @@ export function clampRate(value) {
   return Math.round(limited * 100) / 100;
 }
 
+/* Высота голоса: 0…2 (значения Web Speech API). Низкая высота и есть
+   «джарвис-стиль» — другого способа влиять на тембр у нас нет. */
+export function clampPitch(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return VOICE_DEFAULT_PITCH;
+  const limited = Math.min(VOICE_MAX_PITCH, Math.max(VOICE_MIN_PITCH, n));
+  return Math.round(limited * 100) / 100;
+}
+
+export function normalizeProfile(value) {
+  const id = text(value);
+  return VOICE_PROFILE_IDS.indexOf(id) >= 0 ? id : 'calm';
+}
+
+export function normalizeGender(value) {
+  const id = text(value).toLowerCase();
+  return id === 'male' || id === 'female' ? id : '';
+}
+
+/* Задержка подтверждения: 1…10 секунд, по умолчанию 2. */
+export function clampSendDelay(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return VOICE_SEND_WINDOW_MS;
+  return Math.min(10000, Math.max(1000, Math.round(n)));
+}
+
+/* Пресет профиля, разложенный в настройки. Скорость после выбора профиля можно
+   менять руками — профиль её только задаёт стартовым значением. */
+export function profileSettings(profile) {
+  const preset = VOICE_PROFILES[normalizeProfile(profile)];
+  return {
+    profile: preset.id,
+    rate: preset.rate,
+    pitch: preset.pitch,
+    gender: preset.gender
+  };
+}
+
 export function normalizeSettings(raw) {
   const src = raw && typeof raw === 'object' ? raw : {};
+  const profile = normalizeProfile(src.profile);
+  const preset = VOICE_PROFILES[profile];
+  const gender = normalizeGender(src.gender) || preset.gender;
   return {
     speakReplies: src.speakReplies === true,
     rate: clampRate(src.rate),
-    voiceURI: typeof src.voiceURI === 'string' ? src.voiceURI.trim() : ''
+    pitch: clampPitch(src.pitch === undefined ? preset.pitch : src.pitch),
+    profile,
+    gender,
+    voiceURI: typeof src.voiceURI === 'string' ? src.voiceURI.trim() : '',
+    autoSend: src.autoSend !== false,
+    sendDelay: clampSendDelay(src.sendDelay)
   };
 }
 
@@ -166,6 +237,52 @@ export function composeText(base, finalText, interimText) {
   return head ? head + ' ' + spoken : spoken;
 }
 
+/* ---------- Голосовые команды ---------- */
+
+/* Нормализация фразы для сравнения: регистр, ё, пунктуация, лишние пробелы. */
+export function normalizeCommand(value) {
+  return text(value)
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[^a-zа-я0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export const SEND_COMMANDS = ['отправить', 'отправь', 'отправьте', 'отправит', 'отправим', 'send'];
+export const CANCEL_COMMANDS =
+  ['отмена', 'отмени', 'отменить', 'нет', 'стоп', 'cancel', 'не отправляй', 'отставить'];
+
+/* Команда «отправить» понимается только в конце высказывания: иначе фраза
+   «отправь письмо Пете» превратилась бы в отправку пустого сообщения.
+   Всё, что стоит до команды, — это текст сообщения. */
+export function splitSendCommand(value) {
+  const raw = text(value);
+  if (!raw) return { send: false, rest: '' };
+  const trimmed = raw.replace(/[.!?…,;:]+\s*$/, '').trim();
+  const pattern = new RegExp(
+    '(^|\\s)((отправить|отправь|отправьте) сообщение|' + SEND_COMMANDS.join('|') + ')$',
+    'i'
+  );
+  const match = pattern.exec(trimmed);
+  if (!match) return { send: false, rest: raw };
+  const rest = trimmed.slice(0, match.index + match[1].length)
+    .replace(/[.!?…,;:]+\s*$/, '')
+    .trim();
+  return { send: true, rest };
+}
+
+export function isSendCommand(value) {
+  const parsed = splitSendCommand(value);
+  return parsed.send && !parsed.rest;
+}
+
+export function isCancelCommand(value) {
+  const norm = normalizeCommand(value);
+  if (!norm) return false;
+  return CANCEL_COMMANDS.indexOf(norm) >= 0;
+}
+
 export function voiceErrorText(code) {
   const key = text(code) || 'unknown';
   if (Object.prototype.hasOwnProperty.call(VOICE_ERRORS, key)) return VOICE_ERRORS[key];
@@ -254,9 +371,11 @@ export function listVoices(win) {
   }
 }
 
-/* Голос выбирается так: сохранённый вручную → русский локальный → любой русский.
-   Локальные голоса не зависят от сети и звучат стабильнее. */
-export function pickVoice(voices, voiceURI) {
+/* Голос выбирается так: сохранённый вручную → русский нужного пола → локальный
+   русский → любой русский. Локальные голоса не зависят от сети и звучат
+   стабильнее. Пол — только предпочтение: мужского русского голоса в системе
+   может не быть, тогда молча берём обычный. */
+export function pickVoice(voices, voiceURI, gender) {
   const items = Array.isArray(voices) ? voices.filter(v => v && typeof v === 'object') : [];
   const wanted = text(voiceURI);
   if (wanted) {
@@ -267,7 +386,56 @@ export function pickVoice(voices, voiceURI) {
   if (!russian.length) return null;
   const local = russian.filter(v => v.localService === true);
   const pool = local.length ? local : russian;
-  return pool.find(v => String(v.lang || '').toLowerCase() === 'ru-ru') || pool[0];
+  const wantMale = normalizeGender(gender) === 'male';
+  const wantFemale = normalizeGender(gender) === 'female';
+  if (wantMale) {
+    /* Сначала локальный мужской (работает офлайн), потом любой русский мужской. */
+    const localMale = pool.find(v => VOICE_MALE_NAMES.test(String(v.name || '')));
+    if (localMale) return localMale;
+    const anyMale = russian.find(v => VOICE_MALE_NAMES.test(String(v.name || '')));
+    if (anyMale) return anyMale;
+  }
+  const plain = pool.find(v => String(v.lang || '').toLowerCase() === 'ru-ru');
+  const fallback = plain || pool[0];
+  if (wantFemale) {
+    const female = pool.find(v => !VOICE_MALE_NAMES.test(String(v.name || '')));
+    if (female) return female;
+  }
+  return fallback;
+}
+
+/* iOS отдаёт список голосов асинхронно: до события voiceschanged getVoices()
+   пуст, и первый speak ушёл бы вообще без голоса. Ждём событие один раз. */
+export function whenVoicesReady(win, callback) {
+  const w = win || globalThis;
+  if (!w || typeof callback !== 'function') return false;
+  const synth = w.speechSynthesis;
+  if (!synth) return false;
+  const existing = listVoices(w);
+  if (existing.length) {
+    callback(existing);
+    return true;
+  }
+  const handler = () => {
+    const voices = listVoices(w);
+    try {
+      if (typeof synth.removeEventListener === 'function') {
+        synth.removeEventListener('voiceschanged', handler);
+      } else {
+        synth.onvoiceschanged = null;
+      }
+    } catch (e) {
+      /* браузер может не дать снять обработчик — не страшно, он одноразовый */
+    }
+    if (voices.length) callback(voices);
+  };
+  try {
+    if (typeof synth.addEventListener === 'function') synth.addEventListener('voiceschanged', handler);
+    else synth.onvoiceschanged = handler;
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /* Текст для озвучки: без markdown и без бесконечной длины. */
@@ -296,9 +464,10 @@ export function speak(value, settings, deps) {
     const utter = new Utterance(phrase);
     utter.lang = VOICE_LANG;
     utter.rate = opts.rate;
+    utter.pitch = opts.pitch;
     const voice = Object.prototype.hasOwnProperty.call(extra, 'voice')
       ? extra.voice
-      : pickVoice(listVoices(w), opts.voiceURI);
+      : pickVoice(listVoices(w), opts.voiceURI, opts.gender);
     if (voice) utter.voice = voice;
     synth.speak(utter);
     return true;
@@ -326,11 +495,17 @@ export function voiceSummary(win, settings) {
   const opts = normalizeSettings(settings);
   const recognition = recognitionAvailable(w) ? 'да' : 'нет';
   const tts = canSpeak(w) ? 'да' : 'нет';
-  const voice = pickVoice(listVoices(w), opts.voiceURI);
+  const voice = pickVoice(listVoices(w), opts.voiceURI, opts.gender);
   let voiceText = 'нет русского';
   if (voice) voiceText = voice.name || 'без имени';
   else if (tts !== 'да') voiceText = 'нет синтеза';
+  const preset = VOICE_PROFILES[opts.profile];
+  /* Честность важнее красоты: если мужского русского голоса в системе нет,
+     «джарвис-стиль» звучит обычным голосом — так и пишем в диагностике. */
+  const maleMissing = opts.gender === 'male' && !!voice &&
+    !VOICE_MALE_NAMES.test(String(voice.name || ''));
+  const profileText = preset.title + (maleMissing ? ' (мужской голос не найден)' : '');
   return 'распознавание: ' + recognition + ' · озвучка: ' + (opts.speakReplies ? 'вкл' : 'выкл') +
-    ' · голос: ' + voiceText;
+    ' · голос: ' + voiceText + ' · профиль: ' + profileText;
 }
 
