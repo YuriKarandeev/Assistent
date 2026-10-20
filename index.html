@@ -1,0 +1,4756 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Личный ассистент">
+<meta name="application-name" content="Личный ассистент">
+<meta name="description" content="Личный ассистент: канбан, календарь, дела, увлечения, здоровье.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>Личный ассистент</title>
+<script>
+  // Применяем тему ДО рендера — чтобы не мигало
+  (function() {
+    var t = localStorage.getItem('hobbies_health_theme_v2') || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --panel: #ffffff;
+    --panel-2: #eef1f7;
+    --border: #d8dde8;
+    --text: #1a1d26;
+    --muted: #6b7280;
+    --accent: #4a6cf7;
+    --code: #2f7fe0;
+    --dj: #9b4de0;
+    --event: #14b8a6;
+    --ok: #22a55a;
+    --warn: #e08a00;
+    --bad: #e0455f;
+    --ok-soft: #6fc98a;
+    --bad-soft: #e88093;
+    --shadow: 0 1px 3px rgba(0,0,0,.06);
+    --radius: 10px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html[data-theme="dark"] {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel-2: #1e222d;
+    --border: #2a2f3d;
+    --text: #e6e8ee;
+    --muted: #8b93a7;
+    --accent: #6c8cff;
+    --code: #4ea1ff;
+    --dj: #c06cff;
+    --event: #2dd4bf;
+    --ok: #3ddc84;
+    --warn: #ffb020;
+    --bad: #ff5c7c;
+    --ok-soft: #7fe5a4;
+    --bad-soft: #ff8fa3;
+    --shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { overscroll-behavior-y: contain; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    transition: background .2s, color .2s;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: calc(10px + var(--safe-top)) 16px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; white-space: nowrap; }
+  header .spacer { flex: 1; }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    color: var(--muted);
+    font-weight: 500;
+    border: 1px solid transparent;
+    border-bottom: none;
+    user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--text);
+    background: var(--bg);
+    border-color: var(--border);
+    margin-bottom: -1px;
+  }
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; padding-bottom: calc(16px + var(--safe-bottom)); }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: filter .15s, transform .05s;
+    user-select: none;
+    font-family: inherit;
+  }
+  button:active { transform: scale(.97); }
+  button:hover { filter: brightness(1.08); }
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  button.ghost:hover { background: var(--panel-2); }
+  button.danger { background: var(--bad); }
+  button.mini { padding: 4px 8px; font-size: 12px; }
+
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px;
+    user-select: none;
+  }
+  .theme-toggle .opt {
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: .15s;
+    white-space: nowrap;
+  }
+  .theme-toggle .opt.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  input, select, textarea {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    min-height: 40px;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+  .sync-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 4px 8px;
+    border-radius: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+  }
+  .sync-badge .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background .3s;
+  }
+  .sync-badge.online .dot { background: var(--ok); }
+  .sync-badge.syncing .dot { background: var(--warn); animation: pulse 1s infinite; }
+  .sync-badge.offline .dot { background: var(--bad); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+  /* KANBAN */
+  .kanban {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .column {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    min-height: 200px;
+    box-shadow: var(--shadow);
+  }
+  .column h3 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .column .count {
+    background: var(--panel-2);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+  }
+  .card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    cursor: grab;
+    position: relative;
+    user-select: none;
+  }
+  .card.hobby-dj { border-left-color: var(--dj); }
+  .card.hobby-code { border-left-color: var(--code); }
+  .card.dragging { opacity: .5; }
+  .card .title { font-weight: 500; margin-bottom: 6px; word-break: break-word; }
+  .card .meta {
+    display: flex;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .card .badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  .card .badge.dj { color: var(--dj); border-color: var(--dj); }
+  .card .badge.code { color: var(--code); border-color: var(--code); }
+  .card .move-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+  }
+  .card .move-btns { display: flex; gap: 4px; }
+  .card .move-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .card .move-btn:hover { color: var(--text); border-color: var(--accent); }
+  .card .move-btn:disabled { opacity: .3; cursor: default; }
+  .card .move-btn:disabled:hover { color: var(--muted); border-color: var(--border); }
+  .card .del-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .card .del-btn:hover { color: var(--bad); border-color: var(--bad); }
+  .column.drag-over { border-color: var(--accent); background: rgba(108,140,255,.06); }
+
+  /* CALENDAR */
+  .cal-head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .cal-head .seg {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .cal-head .seg button {
+    background: transparent;
+    color: var(--muted);
+    border-radius: 0;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+  .cal-head .seg button.active { background: var(--accent); color: white; }
+  .cal-grid { display: grid; gap: 6px; }
+  .cal-grid.week { grid-template-columns: repeat(7, 1fr); }
+  .cal-grid.month { grid-template-columns: repeat(7, 1fr); }
+  .cal-grid.year { grid-template-columns: repeat(4, 1fr); }
+  .cal-cell {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px;
+    min-height: 84px;
+    font-size: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .cal-cell.other { opacity: .45; }
+  .cal-cell.today { border-color: var(--accent); }
+  .cal-cell .daynum { color: var(--muted); font-weight: 600; margin-bottom: 4px; font-size: 11px; }
+  .cal-cell.today .daynum { color: var(--accent); }
+  .cal-grid.year .cal-cell { min-height: 70px; }
+  .cal-task {
+    background: var(--panel-2);
+    border-left: 2px solid var(--accent);
+    padding: 2px 5px;
+    border-radius: 4px;
+    margin-bottom: 2px;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+  }
+  .cal-task.dj { border-left-color: var(--dj); }
+  .cal-task.code { border-left-color: var(--code); }
+  .cal-task.done { text-decoration: line-through; opacity: .6; }
+  .cal-task.event {
+    border-left-color: var(--event);
+    background: rgba(20,184,166,.12);
+  }
+
+  /* Ближайшие 7 дней */
+  .upcoming-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .upcoming-panel h3 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .upcoming-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .upcoming-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--panel-2);
+    border-radius: 8px;
+    font-size: 13px;
+    border-left: 3px solid var(--accent);
+  }
+  .upcoming-item.event { border-left-color: var(--event); }
+  .upcoming-item.dj { border-left-color: var(--dj); }
+  .upcoming-item.code { border-left-color: var(--code); }
+  .upcoming-item .u-date {
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 72px;
+    font-weight: 600;
+  }
+  .upcoming-item .u-time {
+    font-size: 11px;
+    color: var(--event);
+    min-width: 42px;
+  }
+  .upcoming-item .u-title {
+    flex: 1;
+    word-break: break-word;
+  }
+  .upcoming-item .u-icon { font-size: 14px; }
+  .upcoming-empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  /* HOBBIES */
+  .subtabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .subtabs.sections {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .subtab {
+    padding: 9px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    background: var(--panel);
+    user-select: none;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .subtab.active { background: var(--panel-2); color: var(--text); }
+  .subtab.active.dj { color: var(--dj); border-color: var(--dj); }
+  .subtab.active.code { color: var(--code); border-color: var(--code); }
+  .subtab.section {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: transparent;
+  }
+  .subtab.section.active {
+    background: var(--panel-2);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .hobby-form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .hobby-form input[type=text] { flex: 1; min-width: 180px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  tr:last-child td { border-bottom: none; }
+  td.done-cell { text-align: center; }
+  td.num-cell { width: 48px; color: var(--muted); }
+  td.actions-cell { width: 60px; text-align: right; }
+  .checkbox {
+    width: 26px;
+    height: 26px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: var(--panel-2);
+    font-size: 15px;
+    line-height: 1;
+    user-select: none;
+    transition: .15s;
+  }
+  .checkbox:hover { border-color: var(--accent); }
+  .checkbox.checked {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: #fff;
+    font-weight: 700;
+  }
+  .row-done td:not(.done-cell) { opacity: .55; text-decoration: line-through; }
+
+  .link-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    line-height: 1;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: .15s;
+  }
+  .link-btn.has-link { color: var(--accent); border-color: var(--accent); }
+  .link-btn:hover { filter: brightness(1.15); }
+
+  .stub {
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 50px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .stub .big { font-size: 34px; margin-bottom: 10px; }
+
+  /* HEALTH */
+  .health-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .day-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 290px;
+    box-shadow: var(--shadow);
+  }
+  .day-card.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .day-card .date { font-size: 12px; color: var(--muted); text-align: center; }
+  .day-card.today .date { color: var(--accent); font-weight: 600; }
+  .day-card .dow {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .state-btns { display: flex; flex-direction: column; gap: 4px; }
+  .state-btn {
+    padding: 8px 6px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    text-align: center;
+    transition: .15s;
+    user-select: none;
+    line-height: 1.2;
+  }
+  .state-btn:hover { color: var(--text); }
+  .state-btn.active[data-state=strongUp]   { background: rgba(224,138,0,.18); color: var(--warn);     border-color: var(--warn); }
+  .state-btn.active[data-state=up]         { background: rgba(111,201,138,.15); color: var(--ok-soft);  border-color: var(--ok-soft); }
+  .state-btn.active[data-state=ok]         { background: rgba(34,165,90,.15); color: var(--ok);        border-color: var(--ok); }
+  .state-btn.active[data-state=down]       { background: rgba(232,128,147,.15); color: var(--bad-soft); border-color: var(--bad-soft); }
+  .state-btn.active[data-state=strongDown] { background: rgba(224,69,95,.18); color: var(--bad);       border-color: var(--bad); }
+  .meds {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: auto;
+    border-top: 1px dashed var(--border);
+    padding-top: 10px;
+  }
+  .med-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .med-row .checkbox { width: 24px; height: 24px; font-size: 13px; }
+
+  /* CHART */
+  .chart-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    box-shadow: var(--shadow);
+  }
+  .chart-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .chart-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .chart-head .seg {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .chart-head .seg button {
+    background: transparent;
+    color: var(--muted);
+    border-radius: 0;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+  .chart-head .seg button.active { background: var(--accent); color: #fff; }
+  .chart-wrap { position: relative; width: 100%; }
+  canvas { width: 100%; display: block; }
+  .chart-legend {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .chart-legend .dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+  }
+  .header-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  /* ===== ДЕЛА (ПРОЕКТЫ) ===== */
+  .project-card .meta {
+    margin-top: 6px;
+  }
+  .project-card .progress-count {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .project-card .progress-count.all-done { color: var(--ok); }
+
+  /* Линия прогресса */
+
+    /* Линия прогресса */
+  .progress-line-wrap {
+    margin: 10px 0 8px;
+  }
+  /* Линия с точками: grid, где точки и линии чередуются */
+  .progress-line {
+    display: grid;
+    align-items: center;
+  }
+  .progress-line .pl-point {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--panel-2);
+    border: 2px solid var(--border);
+    transition: .3s;
+    justify-self: center;
+  }
+  .progress-line .pl-point.done {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .progress-line .pl-point.current {
+    background: var(--warn);
+    border-color: var(--warn);
+    box-shadow: 0 0 0 3px rgba(224,138,0,.2);
+  }
+  .progress-line .pl-point.next {
+    background: var(--panel);
+    border-color: var(--accent);
+  }
+  .progress-line .pl-point.finish {
+    background: var(--panel-2);
+    border-color: var(--muted);
+  }
+  .progress-line .pl-point.all-done {
+    background: var(--ok);
+    border-color: var(--ok);
+  }
+  .progress-line .pl-segment {
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    transition: .3s;
+    align-self: center;
+  }
+  .progress-line .pl-segment.done {
+    background: var(--accent);
+  }
+  .progress-line .pl-segment.all-done {
+    background: var(--ok);
+  }
+  /* Цифры под точками: тоже grid, синхронный с точками */
+  .pl-nums {
+    display: grid;
+    margin-top: 6px;
+  }
+  .pl-num {
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    justify-self: center;
+  }
+
+  .project-card .open-btn {
+    margin-top: 8px;
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .project-card .open-btn:hover { background: var(--panel); border-color: var(--accent); }
+
+  .project-view {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .project-view .pv-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .project-view .pv-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    flex: 1;
+    word-break: break-word;
+  }
+  .project-view .pv-back {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .project-view .pv-back:hover { background: var(--panel-2); }
+  .project-view .pv-status {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .project-view .pv-status button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .project-view .pv-status button.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .project-view .pv-hobby {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .project-view .pv-hobby select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    min-height: 34px;
+  }
+  .subtask-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .subtask {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .subtask.done { opacity: .55; }
+  .subtask.done .st-title { text-decoration: line-through; }
+  .subtask .st-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .subtask .st-title {
+    flex: 1;
+    font-size: 13px;
+    word-break: break-word;
+  }
+  .subtask .st-deadline {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .subtask .st-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .subtask .st-actions button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 3px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .subtask .st-actions button:hover { color: var(--text); border-color: var(--accent); }
+  .subtask .st-actions button.del:hover { color: var(--bad); border-color: var(--bad); }
+
+  .subsub-list {
+    margin-top: 8px;
+    padding-left: 24px;
+    border-left: 2px dashed var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .subsub {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .subsub.done { opacity: .5; }
+  .subsub.done .ss-title { text-decoration: line-through; }
+  .subsub .ss-title { flex: 1; word-break: break-word; }
+  .subsub .ss-del {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+  }
+  .subsub .ss-del:hover { color: var(--bad); }
+
+  /* ===== КАНБАН ПРОЕКТА ===== */
+  .project-kanban {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .project-kanban .column {
+    min-height: 140px;
+    padding: 10px;
+  }
+  .project-kanban .column h3 {
+    font-size: 12px;
+  }
+  .project-kanban .add-col-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--muted);
+    padding: 6px;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .project-kanban .add-col-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* Карточка задачи в канбане проекта */
+  .st-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: grab;
+    user-select: none;
+  }
+  .st-card.dragging { opacity: .5; }
+  .st-card.done .st-title { text-decoration: line-through; opacity: .6; }
+  .st-card .st-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .st-card .st-title {
+    flex: 1;
+    font-size: 13px;
+    word-break: break-word;
+  }
+  .st-card .st-deadline {
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+    margin-top: 4px;
+  }
+  .st-card .st-actions {
+    display: flex;
+    gap: 2px;
+  }
+  .st-card .st-actions button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .st-card .st-actions button:hover { color: var(--text); border-color: var(--accent); }
+  .st-card .st-actions button.del:hover { color: var(--bad); border-color: var(--bad); }
+  .st-card .checkbox {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+
+  /* Общий канбан «Дела» */
+  .deals-subtabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 12px;
+  }
+  .deals-subtab {
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    background: var(--panel);
+    user-select: none;
+    font-size: 13px;
+  }
+  .deals-subtab.active {
+    background: var(--panel-2);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .common-kanban .card {
+    border-left-color: var(--accent);
+  }
+  .common-kanban .card.hobby-dj { border-left-color: var(--dj); }
+  .common-kanban .card.hobby-code { border-left-color: var(--code); }
+  .common-kanban .card .badge.project {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 900px) {
+    .project-kanban {
+      grid-template-columns: repeat(4, 260px);
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 8px;
+    }
+    .project-kanban .column { scroll-snap-align: start; }
+  }
+  @media (max-width: 640px) {
+    .project-kanban { grid-template-columns: repeat(4, 82vw); gap: 10px; }
+  }
+
+  .add-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .add-row input[type=text] { flex: 1; min-width: 140px; font-size: 13px; padding: 6px 10px; min-height: 34px; }
+  .add-row input[type=date] { font-size: 13px; padding: 6px 10px; min-height: 34px; }
+  .add-row button { font-size: 12px; padding: 6px 12px; }
+
+  @media (max-width: 640px) {
+    .project-view { padding: 12px; }
+    .project-view .pv-title { font-size: 16px; }
+    .subsub-list { padding-left: 14px; }
+  }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4);
+  }
+  .modal h3 { margin: 0 0 12px; font-size: 15px; }
+  .modal input { width: 100%; margin-bottom: 14px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* ПОМОЩНИК */
+  .chat-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  .chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 320px;
+    max-height: calc(100vh - 330px);
+    overflow-y: auto;
+    padding: 4px;
+  }
+  .msg { display: flex; flex-direction: column; max-width: 78%; }
+  .msg-user { align-self: flex-end; align-items: flex-end; }
+  .msg-assistant { align-self: flex-start; align-items: flex-start; }
+  .msg-bubble {
+    padding: 9px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.45;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .msg-user .msg-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .msg-assistant .msg-bubble { background: var(--panel-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg-time { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+/* Карточка предложенных изменений в ответе помощника */
+.msg-actions {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.msg-actions-title { font-weight: 600; margin-bottom: 6px; }
+.msg-actions ul { margin: 0 0 8px; padding-left: 18px; display: grid; gap: 3px; }
+.msg-actions li { color: var(--text); }
+.msg-actions-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.msg-actions-btns button { padding: 6px 12px; font-size: 12px; }
+.msg-actions-note { font-size: 12px; color: var(--muted); }
+.msg-actions-note.ok { color: var(--ok); }
+.msg-typing .msg-bubble { color: var(--muted); letter-spacing: 2px; }
+  .chat-form { display: flex; gap: 8px; align-items: flex-end; }
+  .chat-form textarea {
+    flex: 1;
+    resize: none;
+    max-height: 140px;
+    min-height: 40px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .chat-form button { height: 40px; width: 48px; font-size: 16px; }
+  /* Микрофон: своя ширина, чтобы форма на 360px осталась в две кнопки */
+  .chat-form button.mic { width: 44px; padding: 0; }
+  .chat-form button.mic.listening { animation: micPulse 1.2s ease-in-out infinite; }
+  @keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(230, 80, 80, 0.55); }
+    50% { box-shadow: 0 0 0 7px rgba(230, 80, 80, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* Пульсация — украшение: при отключённой анимации остаётся значок ⏹ */
+    .chat-form button.mic.listening { animation: none; box-shadow: 0 0 0 3px rgba(230, 80, 80, 0.45); }
+  }
+  .chat-hint {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+  }
+  .chat-hint button { font-size: 11px; }
+  .msg-speak {
+    margin-top: 4px;
+    padding: 2px 6px;
+    font-size: 13px;
+    line-height: 1.2;
+    background: none;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .msg-speak:hover { color: var(--text); }
+
+  /* ТОСТЫ */
+  .toast-wrap {
+    position: fixed;
+    left: 50%;
+    bottom: calc(18px + var(--safe-bottom));
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 300;
+    pointer-events: none;
+    width: min(92vw, 420px);
+  }
+  .toast {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35);
+    animation: toastIn .18s ease-out;
+  }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.bad { border-left-color: var(--bad); }
+  .toast.hide { opacity: 0; transition: opacity .25s; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* ДАННЫЕ / ИМПОРТ */
+  .modal.wide { max-width: 520px; }
+  .modal textarea { width: 100%; margin-bottom: 14px; resize: vertical; }
+  .modal .row2 { display: flex; gap: 8px; margin-bottom: 10px; }
+  .modal .row2 > * { flex: 1; margin-bottom: 0; min-width: 0; }
+  .modal label.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 14px; cursor: pointer; }
+  .modal label.check input { width: auto; min-height: 0; margin: 0; }
+  .data-row { display: flex; flex-direction: column; gap: 10px; }
+  .data-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .data-list { font-size: 13px; display: grid; gap: 4px; margin-bottom: 12px; }
+  .data-list b { font-weight: 600; }
+  /* диагностика подключения: без консоли видно, кто вошёл и что с записью */
+  .data-diag {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+  }
+  .data-diag > div { display: flex; gap: 10px; justify-content: space-between; align-items: baseline; }
+  .data-diag span { color: var(--muted); flex: 0 0 auto; }
+  .data-diag b { font-weight: 600; text-align: right; word-break: break-all; }
+  .data-diag b.bad { color: var(--bad); }
+  .data-diag b.ok { color: var(--ok); }
+  .data-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 200;
+    transition: opacity .3s;
+  }
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .loading-overlay .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 900px) {
+    .kanban {
+      grid-template-columns: repeat(4, 260px);
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 8px;
+    }
+    .column { scroll-snap-align: start; }
+    .health-grid {
+      grid-template-columns: repeat(7, minmax(140px, 1fr));
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 8px;
+    }
+    .day-card { scroll-snap-align: center; }
+  }
+  @media (max-width: 640px) {
+    header { gap: 8px; padding: calc(8px + var(--safe-top)) 12px 8px; }
+    header h1 { font-size: 14px; }
+    .theme-toggle .opt { padding: 5px 8px; font-size: 11px; }
+    .header-actions button { padding: 6px 10px; font-size: 12px; }
+    main { padding: 12px 12px calc(12px + var(--safe-bottom)); }
+    .tabs { padding: 6px 8px 0; }
+    .tab { padding: 10px 12px; font-size: 13px; }
+    .kanban { grid-template-columns: repeat(4, 82vw); gap: 10px; }
+    .column { min-height: 160px; padding: 10px; }
+    .card { cursor: default; }
+    .health-grid { grid-template-columns: repeat(7, 74vw); gap: 10px; }
+    .day-card { min-height: 320px; }
+    .state-btn { font-size: 13px; padding: 10px 8px; }
+    .cal-grid { gap: 4px; }
+    .cal-cell { min-height: 64px; padding: 4px; font-size: 10px; }
+    .cal-cell .daynum { font-size: 10px; margin-bottom: 3px; }
+    .cal-task { font-size: 9px; padding: 1px 4px; }
+    .cal-grid.year .cal-cell { min-height: 52px; }
+    .subtabs.sections { gap: 4px; }
+    .subtab { padding: 7px 10px; font-size: 12px; }
+    .subtab.section { padding: 6px 10px; font-size: 11px; }
+    .hobby-form { gap: 6px; }
+    .hobby-form input[type=text] { min-width: 100%; }
+    .hobby-form input[type=date] { flex: 1; }
+    .hobby-form button { flex-shrink: 0; }
+    table, thead, tbody, tr, td { display: block; }
+    thead { display: none; }
+    table { border: none; background: transparent; box-shadow: none; border-radius: 0; }
+    tr {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas: "main main" "meta actions";
+      gap: 8px;
+      align-items: center;
+    }
+    td { padding: 0; border: none; font-size: 13px; }
+    td:nth-child(1) { grid-area: main; }
+    td:nth-child(2) { grid-area: meta; color: var(--muted); font-size: 12px; }
+    td:nth-child(n+3) { grid-area: actions; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+    td.num-cell { grid-area: main; font-size: 11px; color: var(--muted); }
+    td.actions-cell { grid-area: actions; }
+    td.done-cell { grid-area: actions; text-align: right; }
+    tr td:nth-child(1) { font-weight: 500; }
+    .modal { padding: 16px; }
+    .chart-panel { padding: 12px; }
+    .chart-head h3 { font-size: 13px; }
+    .chart-head .seg button { padding: 6px 10px; font-size: 11px; }
+  }
+  @media (max-width: 380px) {
+    .kanban { grid-template-columns: repeat(4, 88vw); }
+    .health-grid { grid-template-columns: repeat(7, 82vw); }
+  }
+  /* Диагностика загрузки: на iPhone консоли нет, поэтому текст сбоя виден на экране */
+  .boot-error {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    margin: 0;
+    padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
+    background: var(--bg);
+    color: var(--bad);
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    overflow: auto;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+</style>
+</head>
+<body>
+
+<!-- Показывается только если приложение не стартовало (см. скрипт ниже) -->
+<div class="boot-error" id="bootError" hidden></div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="color:var(--muted);font-size:13px;">Загружаю данные...</div>
+</div>
+
+<header>
+  <h1>🎯 Личный ассистент</h1>
+  <div class="spacer"></div>
+  <div class="header-actions">
+    <span class="sync-badge" id="syncBadge" title="Статус синхронизации">
+      <span class="dot"></span>
+      <span id="syncText">—</span>
+    </span>
+    <button class="ghost mini" id="btnAuth" onclick="window.toggleAuth()">Войти</button>
+    <button class="ghost mini" id="btnData" onclick="window.openDataModal()" title="Данные и резервные копии">💾</button>
+    <button class="mini" id="btnInstall" onclick="window.installApp()" style="display:none;">Установить</button>
+    <div class="theme-toggle" id="themeToggle">
+      <div class="opt" data-theme="light">☀️</div>
+      <div class="opt active" data-theme="dark">🌙</div>
+    </div>
+  </div>
+</header>
+
+<div class="tabs" id="mainTabs">
+  <div class="tab" data-view="kanban">Канбан</div>
+  <div class="tab" data-view="calendar">Календарь</div>
+  <div class="tab" data-view="deals">Дела</div>
+  <div class="tab" data-view="hobbies">Увлечения</div>
+  <div class="tab" data-view="chat">Помощник</div>
+  <div class="tab active" data-view="health">Здоровье</div>
+</div>
+
+<main>
+  <section class="view" id="view-kanban">
+    <div style="margin-bottom:14px;">
+      <button onclick="window.addKanbanCard()">+ Карточка (только Канбан)</button>
+    </div>
+    <div class="kanban" id="kanban"></div>
+  </section>
+
+  <section class="view" id="view-calendar">
+    <div class="upcoming-panel" id="upcomingPanel">
+      <h3>📌 Ближайшие 7 дней</h3>
+      <div class="upcoming-list" id="upcomingList"></div>
+    </div>
+    <div class="cal-head">
+      <div class="seg" id="calSeg">
+        <button data-range="week" class="active">Неделя</button>
+        <button data-range="month">Месяц</button>
+        <button data-range="year">Год</button>
+      </div>
+      <button class="ghost mini" onclick="window.calShift(-1)">←</button>
+      <button class="ghost mini" onclick="window.calToday()">Сегодня</button>
+      <button class="ghost mini" onclick="window.calShift(1)">→</button>
+      <div class="spacer" style="flex:1"></div>
+      <span id="calTitle" style="color:var(--muted); font-size:12px;"></span>
+      <button onclick="window.openEventModal()">+ Событие</button>
+    </div>
+    <div class="cal-grid week" id="calGrid"></div>
+  </section>
+
+  <section class="view" id="view-deals">
+    <div class="deals-subtabs" id="dealsSubtabs">
+      <div class="deals-subtab active" data-deals-view="projects">📁 Проекты</div>
+      <div class="deals-subtab" data-deals-view="kanban">📋 Канбан</div>
+    </div>
+
+    <div id="dealsProjectsTab">
+      <div id="dealsKanban">
+        <div style="margin-bottom:14px;">
+          <button onclick="window.addProject()">+ Проект</button>
+        </div>
+        <div class="kanban" id="projectsKanban"></div>
+      </div>
+      <div id="dealsProjectView" style="display:none;"></div>
+    </div>
+
+    <div id="dealsKanbanTab" style="display:none;">
+      <div class="kanban common-kanban" id="commonKanban"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-hobbies">
+    <div class="subtabs" id="subtabs">
+      <div class="subtab active dj" data-hobby="dj">🎧 Диджеинг</div>
+      <div class="subtab code" data-hobby="code">💻 Программы</div>
+    </div>
+    <div class="subtabs sections" id="sectionTabs"></div>
+    <div id="sectionBody"></div>
+  </section>
+
+  <section class="view active" id="view-health">
+    <div class="health-grid" id="healthGrid"></div>
+    <div class="chart-panel">
+      <div class="chart-head">
+        <h3>📈 Динамика состояния</h3>
+        <div class="seg" id="chartSeg">
+          <button data-range="month" class="active">Месяц</button>
+          <button data-range="quarter">3 мес</button>
+          <button data-range="year">Год</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="healthChart" height="220"></canvas>
+      </div>
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--warn)"></span>Подъём</span>
+        <span><span class="dot" style="background:var(--ok-soft)"></span>Лёгкий +</span>
+        <span><span class="dot" style="background:var(--ok)"></span>Норма</span>
+        <span><span class="dot" style="background:var(--bad-soft)"></span>Лёгкий −</span>
+        <span><span class="dot" style="background:var(--bad)"></span>Спад</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-chat">
+    <div class="chat-panel">
+      <div class="chat-log" id="chatLog"></div>
+      <form class="chat-form" id="chatForm">
+        <textarea id="chatInput" rows="1" placeholder="Сообщение помощнику..."></textarea>
+        <button type="button" class="mic" id="micBtn" title="Сказать голосом" aria-label="Диктовка">🎤</button>
+        <button type="submit" title="Отправить">➤</button>
+      </form>
+      <div class="chat-hint">
+        <button type="button" class="ghost mini" id="voiceToggle" aria-pressed="false"
+          onclick="window.toggleSpeakReplies()">🔊 Озвучка выключена</button>
+        <span>Помощник ставит события и проекты; изменения применяются только после вашего подтверждения.</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<div class="modal-overlay" id="linkModal">
+  <div class="modal">
+    <h3 id="linkModalTitle">Вставить ссылку</h3>
+    <input type="text" id="linkModalInput" placeholder="https://..." autocomplete="off">
+    <div class="modal-actions">
+      <button class="ghost" onclick="window.closeLinkModal()">Отмена</button>
+      <button onclick="window.saveLinkModal()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="eventModal">
+  <div class="modal">
+    <h3 id="eventModalTitle">Новое событие</h3>
+    <input type="hidden" id="eventIdInput">
+    <input type="text" id="eventTitleInput" placeholder="Название события..." autocomplete="off" style="margin-bottom:10px;">
+    <input type="date" id="eventDateInput" style="margin-bottom:10px;">
+    <div class="row2">
+      <input type="time" id="eventTimeInput" title="Начало">
+      <input type="time" id="eventEndInput" title="Окончание">
+    </div>
+    <label class="check"><input type="checkbox" id="eventAllDayInput"> Весь день</label>
+    <textarea id="eventNotesInput" rows="2" placeholder="Заметка (необязательно)"></textarea>
+    <div class="modal-actions">
+      <button class="ghost" id="eventDeleteBtn" style="display:none;margin-right:auto;color:var(--bad);border-color:var(--bad);" onclick="window.deleteEventFromModal()">Удалить</button>
+      <button class="ghost" onclick="window.closeEventModal()">Отмена</button>
+      <button onclick="window.saveEventModal()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="subtaskModal">
+  <div class="modal">
+    <h3 id="subtaskModalTitle">Новая задача</h3>
+    <input type="text" id="subtaskTitleInput" placeholder="Название задачи..." autocomplete="off" style="margin-bottom:10px;">
+    <input type="date" id="subtaskDateInput" style="margin-bottom:14px;">
+    <div class="modal-actions">
+      <button class="ghost" onclick="window.closeSubtaskModal()">Отмена</button>
+      <button onclick="window.saveSubtaskModal()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="dataModal">
+  <div class="modal wide">
+    <h3>Данные и резервные копии</h3>
+    <div class="data-note" id="dataStatus" style="margin-bottom:12px;">Проверяю состояние...</div>
+    <div class="data-diag" id="dataDiag">
+      <div><span>Аккаунт</span><b id="diagAccount">—</b></div>
+      <div><span>UID</span><b id="diagUid">—</b></div>
+      <div><span>Документ</span><b id="diagDoc">—</b></div>
+      <div><span>Состояние</span><b id="diagState">—</b></div>
+      <div><span>Последняя запись</span><b id="diagWrite">—</b></div>
+      <div><span>Последняя ошибка</span><b id="diagError">—</b></div>
+      <div><span>Слияние</span><b id="diagMerge">—</b></div>
+      <div><span>Помощник</span><b id="diagAi">—</b></div>
+      <div><span>Голос</span><b id="diagVoice">—</b></div>
+    </div>
+    <div class="data-note" id="diagHint" style="margin-bottom:10px;"></div>
+
+    <div class="data-note" style="margin-top:14px;">
+      Ключ DeepSeek API для помощника. Хранится только на этом устройстве (localStorage)
+      и в облако не попадает: на телефоне его нужно вставить отдельно.
+    </div>
+    <div class="data-row">
+      <input type="password" id="aiKeyInput" placeholder="sk-..." autocomplete="off" spellcheck="false"
+        style="flex:1;min-width:180px;">
+      <button class="ghost" onclick="window.saveAiKey()">Сохранить ключ</button>
+      <button class="ghost" onclick="window.clearAiKey()">Удалить ключ</button>
+    </div>
+
+    <div class="data-btns">
+      <button class="ghost mini" onclick="window.checkCloudNow()">Проверить связь</button>
+      <button class="ghost mini" onclick="window.copyDiag()">Скопировать диагностику</button>
+    </div>
+    <div class="data-row">
+      <button onclick="window.exportJSON()">⬇ Скачать JSON-копию</button>
+      <button class="ghost" onclick="window.pickImportJSON()">⬆ Загрузить JSON-копию</button>
+      <button class="ghost" onclick="window.importFromLegacy()">📦 Забрать данные из старого проекта</button>
+      <button id="legacyApplyBtn" style="display:none;" onclick="window.applyLegacyImport()">✅ Записать найденное в облако</button>
+    </div>
+    <div class="data-note" style="margin-top:12px;">
+      Старый проект читается только на чтение: там ничего не записывается и не удаляется.
+      Импорт заменяет текущие данные — перед ним автоматически скачивается копия.
+    </div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="ghost" onclick="window.closeDataModal()">Закрыть</button>
+    </div>
+    <input type="file" id="importFileInput" accept="application/json,.json" style="display:none;">
+  </div>
+</div>
+
+<div class="modal-overlay" id="cloudGuardModal">
+  <div class="modal wide">
+    <h3 id="cloudGuardTitle">В облаке пусто</h3>
+    <div class="data-note" id="cloudGuardText" style="margin-bottom:12px;"></div>
+    <div class="data-list" id="cloudGuardStats"></div>
+    <div class="modal-actions" style="flex-wrap:wrap;">
+      <button class="ghost" onclick="window.cloudGuardAcceptCloud()">Принять облачные</button>
+      <button onclick="window.cloudGuardKeepLocal()">Записать мои в облако</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Диагностика старта. На iPhone консоли нет, поэтому текст сбоя выводим на экран.
+  // Плашка показывается, только пока приложение не поднялось (window.__appReady),
+  // чтобы не перекрывать рабочий интерфейс случайной ошибкой обработчика.
+  (function () {
+    function showBootError(detail) {
+      if (window.__appReady === true) return;
+      var box = document.getElementById('bootError');
+      if (!box || !box.hidden) return;
+      box.hidden = false;
+      box.textContent = 'Ошибка загрузки: ' + detail +
+        '\n\nЧто делать:\n1. Обновите страницу.\n2. Проверьте интернет.\n3. Отключите VPN и блокировщики.\n4. Если не помогло — сообщите этот текст.';
+      // Тап по плашке скрывает её, чтобы можно было посмотреть, что под ней
+      box.addEventListener('click', function () { box.hidden = true; });
+    }
+
+    window.addEventListener('error', function (event) {
+      var target = event.target;
+      var isScript = target && target.tagName === 'SCRIPT';
+      var isRuntime = !target || target === window || target === document;
+      if (!isScript && !isRuntime) return;
+      showBootError(event.message || (target && (target.src || target.href)) || 'неизвестная ошибка');
+    }, true);
+
+    window.addEventListener('unhandledrejection', function (event) {
+      var reason = event.reason;
+      showBootError((reason && (reason.message || reason.code)) || String(reason || 'неизвестная ошибка'));
+    });
+
+    // Страховка: если ES-модуль не загрузился (нет сети/CDN), заглушка не должна висеть вечно.
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        var el = document.getElementById('loadingOverlay');
+        if (el && !el.classList.contains('hidden')) {
+          el.classList.add('hidden');
+          var badge = document.getElementById('syncBadge');
+          var text = document.getElementById('syncText');
+          if (badge) { badge.classList.remove('online', 'syncing', 'offline'); badge.classList.add('offline'); }
+          if (text) text.textContent = 'Нет загрузки: проверьте интернет';
+          showBootError('модуль приложения не загрузился (нет сети или CDN)');
+        }
+      }, 12000);
+    });
+  })();
+</script>
+
+<script type="module">
+/* ============================================================
+   FIREBASE
+   ============================================================ */
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
+import {
+  initializeFirestore, getFirestore, doc, getDoc, getDocFromServer, setDoc, onSnapshot,
+  persistentLocalCache, persistentMultipleTabManager
+} from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
+import {
+  getAuth, getRedirectResult, onAuthStateChanged, GoogleAuthProvider,
+  signInWithPopup, signInWithRedirect, signOut
+} from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
+/* Слияние массивов по id + надгробия удалений (см. sync-merge.js) */
+import { buildWriteState, mergeState, sameSyncSignature, tombstoneCount } from './sync-merge.js';
+/* Ключ DeepSeek, запрос к модели, разбор ответа и применение действий (см. ai.js) */
+import * as ai from './ai.js';
+/* Распознавание речи и озвучка ответов (см. voice.js) */
+import * as voice from './voice.js';
+
+/* Новый проект — рабочая база */
+const firebaseConfig = {
+  apiKey: "AIzaSyD1egGLeCn_jwEYMWdAd0azJqmjr45cSt0",
+  authDomain: "assistent-4abae.firebaseapp.com",
+  projectId: "assistent-4abae",
+  storageBucket: "assistent-4abae.firebasestorage.app",
+  messagingSenderId: "836574359085",
+  appId: "1:836574359085:web:b7125d4f3fef002f4e12a4"
+};
+
+/* Старый проект — ТОЛЬКО ЧТЕНИЕ, для разового импорта. Запись сюда запрещена. */
+const LEGACY_CONFIG = {
+  apiKey: "AIzaSyCEI7MfHWtP7JDIodZnLU2hf7A5BK5M8k0",
+  authDomain: "mylifeplanner-98a49.firebaseapp.com",
+  projectId: "mylifeplanner-98a49",
+  storageBucket: "mylifeplanner-98a49.firebasestorage.app",
+  messagingSenderId: "367632220010",
+  appId: "1:367632220010:web:f37e7c5b812372ed38ef13"
+};
+
+const OWNER_EMAIL = 'karandeevrus@gmail.com';
+
+// ?sandbox=1 — тестовый документ users/{uid}/sandbox/main,
+// чтобы проверки не пачкали рабочие данные
+const SANDBOX = new URLSearchParams(location.search).get('sandbox') === '1';
+
+const app = initializeApp(firebaseConfig);
+// persistentLocalCache вместо устаревшего enableIndexedDbPersistence:
+// работает в нескольких вкладках без ошибки failed-precondition.
+// На iOS в приватном режиме IndexedDB может быть недоступен — тогда кэш в памяти,
+// иначе приложение остаётся вообще без базы (как сделано в js/db.js).
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch (cacheErr) {
+  console.warn('Постоянный кэш недоступен, работаю с кэшем в памяти:', cacheErr);
+  db = getFirestore(app);
+}
+const auth = getAuth(app);
+
+let currentUser = null;   // вошедший пользователь
+let unsubCloud = null;    // отписка от документа состояния
+let docRef = null;        // документ состояния текущего пользователя
+let localDirty = false;   // есть правки, сделанные до входа
+let guardOpen = false;    // открыт диалог выбора «чей источник правды»
+let pendingWrite = false; // запись в облако запланирована, снимок не должен перетирать state
+
+function statePath(uid) {
+  return SANDBOX ? ['users', uid, 'sandbox', 'main'] : ['users', uid, 'state', 'main'];
+}
+
+/* ============================================================
+   СОСТОЯНИЕ
+   ============================================================ */
+const STORAGE_KEY = 'hobbies_health_mvp_v3';
+const THEME_KEY = 'hobbies_health_theme_v2';
+
+const DEFAULT_STATE = {
+  tasks: [],
+  kanbanCards: [],
+  health: {},
+  works: [],
+  programs: [],
+  events: [],
+  projects: [],
+  messages: [],
+  activeHobby: 'dj',
+  activeSection: { dj: 'tasks', code: 'tasks' },
+  openProjectId: null,
+  rev: 0,
+  updatedAt: '',
+  // Надгробия удалений: { tasks: {id: ISO}, 'projects/<id>/subtasks': {...} }
+  tombstones: {}
+};
+
+let state = loadLocal();
+/* Слияние: с чем сравнивать при записи (последнее синхронизированное состояние)
+   и последний снимок облака — чтобы не терять чужие добавления */
+let syncBaseline = structuredClone(state);
+let cloudDoc = null;
+/* Следующая запись должна заменить облако, а не слиться с ним (импорт JSON / старых данных) */
+let replaceNext = false;
+let theme = localStorage.getItem(THEME_KEY) || 'dark';
+let cloudReady = false;
+let saveTimer = null;
+
+/* Диагностика подключения: копится в памяти, показывается в 💾 */
+let diagLastWriteAt = '';   // ISO последней подтверждённой записи
+let diagLastRev = 0;        // rev, который подтвердило облако
+let diagLastError = null;   // { code, text, hint, at }
+let diagNotifiedCode = '';  // антиспам: об одном коде тост показываем один раз
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return structuredClone(DEFAULT_STATE);
+    const parsed = JSON.parse(raw);
+    const merged = { ...structuredClone(DEFAULT_STATE), ...parsed };
+    if (!merged.activeSection) merged.activeSection = { dj: 'tasks', code: 'tasks' };
+    if (!merged.works) merged.works = [];
+    if (!merged.programs) merged.programs = [];
+    if (!merged.events) merged.events = [];
+    if (!merged.projects) merged.projects = [];
+    if (!merged.messages) merged.messages = [];
+    if (!merged.tombstones || typeof merged.tombstones !== 'object') merged.tombstones = {};
+    if (merged.openProjectId === undefined) merged.openProjectId = null;
+    migrateProjects(merged.projects);
+    return merged;
+  } catch (e) {
+    return structuredClone(DEFAULT_STATE);
+  }
+}
+
+function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+// Миграция: добавляем column старым подзадачам, у которых его нет
+function migrateProjects(projects) {
+  projects.forEach(p => {
+    (p.subtasks || []).forEach(st => {
+      if (!st.column) {
+        st.column = st.done ? 'done' : 'idea';
+      }
+      // вложенные — оставляем как есть, они не на канбане
+    });
+  });
+}
+
+function saveState() {
+  saveLocal();
+  if (!currentUser) {
+    // до входа писать некуда: помечаем, что на устройстве есть несинхронизированные правки
+    replaceNext = false;
+    localDirty = true;
+    setSyncStatus('offline', 'Войдите для сохранения');
+    return;
+  }
+  if (!cloudReady || !docRef) { replaceNext = false; return; }
+  clearTimeout(saveTimer);
+  setSyncStatus('syncing', 'Сохраняю...');
+  saveTimer = setTimeout(async () => {
+    pendingWrite = true;
+    try {
+      const nowIso = new Date().toISOString();
+      // Сводим локальные правки с последним снимком облака: удаления превращаются
+      // в надгробия, а добавления других устройств не затираются
+      const built = buildWriteState(state, syncBaseline, cloudDoc, nowIso, { replace: replaceNext });
+      state = built.state;
+      state.rev = (state.rev || 0) + 1;
+      state.updatedAt = nowIso;
+      saveLocal();
+      // merge: true — на случай полей, которых нет в локальной модели
+      await setDoc(docRef, state, { merge: true });
+      replaceNext = false;
+      syncBaseline = structuredClone(state);
+      cloudDoc = structuredClone(state);
+      localDirty = false;
+      pendingWrite = false;
+      setSyncStatus('online', 'Синхронизировано');
+      noteSyncOk(state.rev, state.updatedAt);
+    } catch (e) {
+      console.error('Ошибка сохранения:', e);
+      // Флаг импорта снимаем: иначе снимки перестали бы применяться вовсе
+      replaceNext = false;
+      pendingWrite = false;
+      setSyncStatus('offline', humanFsError(e));
+      noteSyncError(e, 'write');
+    }
+  }, 600);
+  pendingWrite = true;
+}
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function setSyncStatus(status, text) {
+  const badge = document.getElementById('syncBadge');
+  const textEl = document.getElementById('syncText');
+  if (!badge || !textEl) return;
+  badge.classList.remove('online', 'syncing', 'offline');
+  badge.classList.add(status);
+  textEl.textContent = text;
+}
+
+/* ============================================================
+   FIREBASE SYNC
+   ============================================================ */
+/* ============================================================
+   АВТОРИЗАЦИЯ
+   ============================================================ */
+const AUTH_ERRORS = {
+  'auth/unauthorized-domain': 'Домен не разрешён: Firebase → Authentication → Settings → Authorized domains',
+  'auth/operation-not-allowed': 'Вход через Google выключен: Authentication → Sign-in method',
+  'auth/invalid-api-key': 'Неверный apiKey в конфиге',
+  'auth/network-request-failed': 'Нет сети — войти не удалось',
+  'auth/invalid-credential': 'Сессия входа устарела — попробуйте ещё раз',
+  'auth/popup-blocked': 'Браузер заблокировал окно входа — разрешите всплывающие окна',
+  'auth/account-exists-with-different-credential': 'Этот email уже привязан к другому способу входа'
+};
+
+/* Единый словарь ошибок: одинаковый текст в бейдже, тосте и диагностике */
+const FS_ERRORS = {
+  'permission-denied': {
+    short: 'Нет доступа (правила)',
+    hint: 'Firestore не пускает. Проверьте, что правила для users/{uid}/** опубликованы и вход выполнен под владельцем.'
+  },
+  'unauthenticated': {
+    short: 'Нужен вход',
+    hint: 'Нажмите «Войти» и повторите.'
+  },
+  'unavailable': {
+    short: 'Нет связи',
+    hint: 'Firestore недоступна. Данные остались на устройстве, запись повторится, когда появится сеть.'
+  },
+  'failed-precondition': {
+    short: 'Firestore не готова',
+    hint: 'В Firebase Console не создана база Firestore или не включён нужный режим.'
+  },
+  'not-found': {
+    short: 'Не найдено',
+    hint: 'Документ или база отсутствуют.'
+  },
+  'invalid-api-key': {
+    short: 'Неверный apiKey',
+    hint: 'Сверьте firebaseConfig с настройками проекта Firebase.'
+  }
+};
+
+function fsErrorInfo(err) {
+  const code = err && err.code ? String(err.code) : '';
+  const known = FS_ERRORS[code];
+  return {
+    code: code || 'unknown',
+    short: known ? known.short : 'Ошибка синхронизации',
+    hint: known ? known.hint : ''
+  };
+}
+
+function humanFsError(err) {
+  return fsErrorInfo(err).short;
+}
+
+/* ---------- Диагностика: то, что раньше было видно только в консоли ---------- */
+
+function diagTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getDate()) + '.' + p(d.getMonth() + 1) + ' ' +
+    p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+
+function diagStateText() {
+  if (!currentUser) return 'локально, без облака';
+  if (!cloudReady) return 'подключаюсь...';
+  if (pendingWrite) return 'записываю...';
+  if (localDirty) return 'есть правки не в облаке';
+  return SANDBOX ? 'синхронизировано (тест)' : 'синхронизировано';
+}
+
+/* Ключ DeepSeek живёт только в localStorage этого устройства: в state и в облако он не идёт.
+   В диагностике показываем лишь края — целиком ключ не светим даже в скриншоте. */
+function aiKeyText() {
+  const key = ai.getKey(localStorage);
+  if (!key) return 'ключ не задан';
+  if (key.length <= 12) return 'ключ задан';
+  return 'ключ задан · ' + key.slice(0, 6) + '…' + key.slice(-4);
+}
+
+window.saveAiKey = function () {
+  const input = document.getElementById('aiKeyInput');
+  const key = ai.normalizeKey(input ? input.value : '');
+  if (!ai.looksLikeKey(key)) {
+    toast('Ключ DeepSeek начинается с sk- — проверьте вставку', 'bad');
+    return;
+  }
+  if (!ai.setKey(key, localStorage)) {
+    toast('Не удалось сохранить ключ: браузер не дал доступ к localStorage', 'bad');
+    return;
+  }
+  if (input) input.value = '';
+  renderDiag();
+  toast('Ключ сохранён на этом устройстве', 'ok');
+};
+
+window.clearAiKey = function () {
+  ai.clearKey(localStorage);
+  renderDiag();
+  toast('Ключ удалён с этого устройства', 'ok');
+};
+
+function renderDiag() {
+  const box = document.getElementById('dataDiag');
+  if (!box) return;
+  const put = (id, text, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    if (cls !== undefined) el.className = cls;
+  };
+  put('diagAccount', currentUser ? (currentUser.email || 'без email') : 'вход не выполнен',
+    currentUser ? 'ok' : '');
+  put('diagUid', currentUser ? currentUser.uid : '—');
+  put('diagDoc', currentUser
+    ? 'users/' + currentUser.uid + '/' + (SANDBOX ? 'sandbox' : 'state') + '/main'
+    : 'localStorage (hobbies_health_mvp_v3)');
+  put('diagState', diagStateText(), currentUser && cloudReady ? 'ok' : '');
+  put('diagWrite', diagLastWriteAt
+    ? diagTime(diagLastWriteAt) + ' · rev ' + diagLastRev
+    : 'ещё не было');
+  put('diagError', diagLastError
+    ? diagLastError.text + ' (' + diagLastError.code + ', ' + diagTime(diagLastError.at) + ')'
+    : 'нет', diagLastError ? 'bad' : '');
+  const hidden = tombstoneCount(state.tombstones);
+  put('diagMerge', 'по id · скрытых удалённых: ' + hidden);
+  put('diagAi', aiKeyText(), ai.getKey(localStorage) ? 'ok' : '');
+  put('diagVoice',
+    voice.voiceSummary(window, voiceSettings) +
+      (voiceLastError ? ' · ошибка: ' + voiceLastError.code : ''),
+    voice.recognitionAvailable(window) ? 'ok' : '');
+  const hint = document.getElementById('diagHint');
+  if (hint) {
+    hint.textContent = diagLastError && diagLastError.hint ? diagLastError.hint : '';
+    hint.style.display = hint.textContent ? '' : 'none';
+  }
+}
+
+/* Ошибка синхронизации: в диагностику всегда, в тост — один раз на код */
+function noteSyncError(err, context) {
+  const info = fsErrorInfo(err);
+  diagLastError = { code: info.code, text: info.short, hint: info.hint, at: new Date().toISOString() };
+  renderDiag();
+  // «нет связи» и отмена — не повод пугать тостом, к тому же снимки повторяются
+  if (info.code === 'cancelled' || info.code === 'unavailable') return;
+  const key = String(context) + '|' + info.code;
+  if (diagNotifiedCode === key) return;
+  diagNotifiedCode = key;
+  toast((context === 'write' ? 'Не удалось записать: ' : 'Синхронизация: ') + info.short +
+    (info.code === 'permission-denied' ? ' — проверьте правила Firestore' : ''), 'bad');
+}
+
+/* Успешная запись: фиксируем время и rev, снимаем прошлую ошибку */
+function noteSyncOk(rev, at) {
+  diagLastWriteAt = at || new Date().toISOString();
+  diagLastRev = rev || 0;
+  diagLastError = null;
+  diagNotifiedCode = '';
+  renderDiag();
+}
+
+function hideLoading() {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.classList.add('hidden');
+  // Приложение поднялось: плашка диагностики больше не должна перекрывать интерфейс
+  // (её мог показать сторож по таймауту, если сеть ответила позже 12 секунд)
+  const boot = document.getElementById('bootError');
+  if (boot) boot.hidden = true;
+  window.__appReady = true;
+}
+
+function updateAuthUI() {
+  const btn = document.getElementById('btnAuth');
+  if (!btn) return;
+  btn.textContent = currentUser ? 'Выйти' : 'Войти';
+  btn.title = currentUser ? (currentUser.email || '') : 'Вход через Google';
+}
+
+async function signInOwner() {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (err) {
+    const code = err && err.code ? String(err.code) : '';
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+    if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+      try {
+        await signInWithRedirect(auth, provider);
+        return;
+      } catch (err2) {
+        toast(AUTH_ERRORS[code] || 'Не удалось открыть окно входа', 'bad');
+        return;
+      }
+    }
+    toast(AUTH_ERRORS[code] || ('Ошибка входа: ' + (code || 'неизвестно')), 'bad');
+  }
+}
+
+window.toggleAuth = async function () {
+  if (currentUser) {
+    await signOut(auth);
+    toast('Вы вышли: данные остались в облаке', 'ok');
+    return;
+  }
+  await signInOwner();
+};
+
+onAuthStateChanged(auth, async user => {
+  if (unsubCloud) { unsubCloud(); unsubCloud = null; }
+  docRef = null;
+  cloudReady = false;
+  guardOpen = false;
+  // диагностика относится к прошлой сессии — обнуляем
+  diagLastWriteAt = '';
+  diagLastRev = 0;
+  diagLastError = null;
+  diagNotifiedCode = '';
+
+  if (!user) {
+    currentUser = null;
+    renderDiag();
+    updateAuthUI();
+    hideLoading();
+    setSyncStatus('offline', 'Вход не выполнен');
+    renderAll();
+    return;
+  }
+
+  if (user.email && user.email !== OWNER_EMAIL) {
+    toast('Доступ только для владельца (' + OWNER_EMAIL + ')', 'bad');
+    await signOut(auth);
+    return;
+  }
+
+  currentUser = user;
+  renderDiag();
+  updateAuthUI();
+  docRef = doc(db, ...statePath(user.uid));
+  setSyncStatus('syncing', 'Подключаюсь...');
+  attachCloud();
+});
+
+/* Возврат после redirect-входа (Safari/iOS: popup там блокируется).
+   Без getRedirectResult причина отказа теряется, и кнопка «Войти» молча остаётся на месте. */
+getRedirectResult(auth).catch(err => {
+  const code = err && err.code ? String(err.code) : '';
+  if (!code) return;
+  toast(AUTH_ERRORS[code] || ('Вход не завершён: ' + code), 'bad');
+});
+
+/* ============================================================
+   СИНХРОНИЗАЦИЯ: ЗАСЛОН ОТ ПЕРЕЗАПИСИ
+   ============================================================ */
+function normalizeState() {
+  if (!state.activeSection) state.activeSection = { dj: 'tasks', code: 'tasks' };
+  ['tasks', 'kanbanCards', 'works', 'programs', 'events', 'projects', 'messages'].forEach(k => {
+    if (!Array.isArray(state[k])) state[k] = [];
+  });
+  if (!state.tombstones || typeof state.tombstones !== 'object') state.tombstones = {};
+  if (!state.health || typeof state.health !== 'object') state.health = {};
+  if (state.openProjectId === undefined) state.openProjectId = null;
+  migrateProjects(state.projects);
+}
+
+function adoptState(data, options = {}) {
+  state = { ...structuredClone(DEFAULT_STATE), ...data };
+  normalizeState();
+  saveLocal();
+  syncBaseline = structuredClone(state);
+  // Импорт: следующая запись заменит облако целиком, а не сольётся с ним
+  // (записи, которых в файле нет, получат надгробия — их уберут и на других устройствах)
+  replaceNext = !!options.replace;
+}
+
+/* Обычный снимок облака: не заменяем состояние, а сливаем — иначе правки,
+   сделанные на этом устройстве без сети, пропали бы при первом же обновлении. */
+function applyCloudState(cloud) {
+  const nowIso = new Date().toISOString();
+  const merged = mergeState(state, cloud, { now: nowIso });
+  const needPush = !sameSyncSignature(merged, cloud);
+  state = merged;
+  normalizeState();
+  saveLocal();
+  syncBaseline = structuredClone(state);
+  // Если после слияния у нас есть то, чего в облаке нет, — отправляем
+  if (needPush) saveState();
+}
+
+function stateIsEmpty(s) {
+  if (!s) return true;
+  const lists = ['tasks', 'kanbanCards', 'works', 'programs', 'events', 'projects', 'messages'];
+  if (lists.some(k => Array.isArray(s[k]) && s[k].length)) return false;
+  if (s.health && Object.keys(s.health).length) return false;
+  // Документ с одними надгробиями — это «всё удалено», а не пустая база
+  if (tombstoneCount(s.tombstones)) return false;
+  return true;
+}
+
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+function summaryText(s) {
+  if (!s) return 'данных нет';
+  const parts = [];
+  const add = (n, one, few, many) => { if (n) parts.push(n + ' ' + plural(n, one, few, many)); };
+  add((s.tasks || []).length, 'задача', 'задачи', 'задач');
+  add((s.events || []).length, 'событие', 'события', 'событий');
+  add((s.projects || []).length, 'проект', 'проекта', 'проектов');
+  add((s.kanbanCards || []).length, 'карточка', 'карточки', 'карточек');
+  add(Object.keys(s.health || {}).length, 'день здоровья', 'дня здоровья', 'дней здоровья');
+  return parts.length ? parts.join(', ') : 'данных нет';
+}
+
+/* ============================================================
+   МОБИЛЬНЫЙ ПОРЯДОК ВКЛАДОК
+   ============================================================ */
+function showCloudGuard(title, text, localSnapshot, cloudData) {
+  guardOpen = true;
+  window._guardLocal = localSnapshot;
+  window._guardCloud = cloudData || null;
+  document.getElementById('cloudGuardTitle').textContent = title;
+  document.getElementById('cloudGuardText').textContent = text;
+  document.getElementById('cloudGuardStats').innerHTML =
+    'На этом устройстве: <b>' + escapeHtml(summaryText(localSnapshot)) + '</b>' +
+    (cloudData ? '<br>В облаке: <b>' + escapeHtml(summaryText(cloudData)) + '</b>' : '');
+  document.getElementById('cloudGuardModal').classList.add('active');
+  hideLoading();
+}
+
+function closeCloudGuard() {
+  document.getElementById('cloudGuardModal').classList.remove('active');
+  guardOpen = false;
+  window._guardLocal = null;
+  window._guardCloud = null;
+}
+
+window.cloudGuardKeepLocal = async function () {
+  if (!docRef || !currentUser) { closeCloudGuard(); return; }
+  const cloud = window._guardCloud;
+  try {
+    const nowIso = new Date().toISOString();
+    // Даже при выборе «записать мои» подмешиваем облачные записи: данные не теряются
+    const built = buildWriteState(state, syncBaseline, cloud, nowIso);
+    state = built.state;
+    state.rev = (state.rev || 0) + 1;
+    state.updatedAt = nowIso;
+    await setDoc(docRef, state, { merge: true });
+    saveLocal();
+    syncBaseline = structuredClone(state);
+    cloudDoc = structuredClone(state);
+    localDirty = false;
+    cloudReady = true;
+    closeCloudGuard();
+    setSyncStatus('online', 'Записано в облако');
+    noteSyncOk(state.rev, state.updatedAt);
+    toast('Данные с устройства записаны в облако', 'ok');
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    setSyncStatus('offline', humanFsError(e));
+    noteSyncError(e, 'write');
+  }
+};
+
+window.cloudGuardAcceptCloud = function () {
+  const cloud = window._guardCloud;
+  closeCloudGuard();
+  if (cloud) adoptState(cloud);
+  cloudReady = true;
+  localDirty = false;
+  setSyncStatus('online', 'Облачные данные приняты');
+  renderDiag();
+  renderAll();
+};
+
+function attachCloud() {
+  if (!docRef) return;
+  unsubCloud = onSnapshot(docRef, snap => {
+    hideLoading();
+    // Последний известный документ облака: по нему сводим данные перед записью
+    cloudDoc = snap.exists() ? snap.data() : null;
+    // Пока открыт диалог выбора, висит наша запись или не отправлен импорт —
+    // не перетираем состояние
+    if (guardOpen || pendingWrite || replaceNext) return;
+
+    if (snap.exists()) {
+      const cloud = snap.data();
+      const cloudEmpty = stateIsEmpty(cloud);
+      if (!cloudReady && (localDirty || (cloudEmpty && !stateIsEmpty(state)))) {
+        showCloudGuard(
+          'В облаке пусто',
+          'На этом устройстве есть данные, а в облаке их нет. «Записать мои в облако» — перенести данные с устройства. «Принять облачные» — оставить пустое облако.',
+          state, cloud
+        );
+        return;
+      }
+      applyCloudState(cloud);
+      cloudReady = true;
+      // «последняя запись» — по данным облака, ошибку не снимаем: она остаётся в панели
+      if (cloud.rev) diagLastRev = Number(cloud.rev) || diagLastRev;
+      if (cloud.updatedAt) diagLastWriteAt = cloud.updatedAt;
+      renderDiag();
+      setSyncStatus('online', SANDBOX ? 'Синхронизировано (тест)' : 'Синхронизировано');
+    } else {
+      if (!cloudReady && (localDirty || !stateIsEmpty(state))) {
+        showCloudGuard(
+          'Документа в облаке нет',
+          'На этом устройстве есть данные. «Записать мои в облако» — создать документ с этими данными. «Принять облачные» — ничего не записывать.',
+          state, null
+        );
+        return;
+      }
+      cloudReady = true;
+      setSyncStatus('online', SANDBOX ? 'Облако пустое (тест)' : 'Облако пустое');
+    }
+    renderAll();
+  }, err => {
+    console.error('Snapshot error:', err);
+    hideLoading();
+    setSyncStatus('offline', humanFsError(err));
+    noteSyncError(err, 'snapshot');
+    renderAll();
+  });
+}
+
+function applyMobileTabOrder() {
+  const isMobile = window.matchMedia('(max-width: 640px)').matches;
+  const tabsEl = document.getElementById('mainTabs');
+  const tabs = [...tabsEl.querySelectorAll('.tab')];
+  const mobileOrder = ['health', 'kanban', 'deals', 'calendar', 'chat', 'hobbies'];
+  const desktopOrder = ['kanban', 'calendar', 'deals', 'hobbies', 'chat', 'health'];
+  const order = isMobile ? mobileOrder : desktopOrder;
+  order.forEach(name => {
+    const t = tabs.find(x => x.dataset.view === name);
+    if (t) tabsEl.appendChild(t);
+  });
+}
+applyMobileTabOrder();
+window.addEventListener('resize', () => {
+  clearTimeout(window._orderTimer);
+  window._orderTimer = setTimeout(applyMobileTabOrder, 150);
+});
+
+/* ============================================================
+   ТЕМА
+   ============================================================ */
+function applyTheme(t) {
+  theme = t;
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem(THEME_KEY, t);
+  document.querySelectorAll('#themeToggle .opt').forEach(o => {
+    o.classList.toggle('active', o.dataset.theme === t);
+  });
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t === 'dark' ? '#0f1117' : '#f5f6fa');
+  if (document.getElementById('view-health').classList.contains('active')) drawHealthChart();
+}
+document.querySelectorAll('#themeToggle .opt').forEach(o => {
+  o.addEventListener('click', () => applyTheme(o.dataset.theme));
+});
+
+/* ============================================================
+   ДАТЫ
+   ============================================================ */
+function todayISO() { return toISO(new Date()); }
+function toISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function fromISO(s) {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function addDays(iso, n) { const d = fromISO(iso); d.setDate(d.getDate() + n); return toISO(d); }
+function formatRu(iso) { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; }
+const DOW_RU = ['вс','пн','вт','ср','чт','пт','сб'];
+const MONTH_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const MONTH_SHORT = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+/* ============================================================
+   ВКЛАДКИ
+   ============================================================ */
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+    if (tab.dataset.view === 'kanban') renderKanban();
+    if (tab.dataset.view === 'calendar') { renderCalendar(); renderUpcoming(); }
+    if (tab.dataset.view === 'deals') renderDeals();
+    if (tab.dataset.view === 'hobbies') renderHobbies();
+    if (tab.dataset.view === 'health') { renderHealth(); drawHealthChart(); }
+  });
+});
+
+/* ============================================================
+   КАНБАН
+   ============================================================ */
+const COLUMNS = [
+  { id: 'idea',     title: 'Идея' },
+  { id: 'planned',  title: 'Запланировано' },
+  { id: 'progress', title: 'В работе' },
+  { id: 'done',     title: 'Готово' }
+];
+
+function renderKanban() {
+  const root = document.getElementById('kanban');
+  root.innerHTML = '';
+  COLUMNS.forEach((col, colIdx) => {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'column';
+    colDiv.dataset.col = col.id;
+    const cards = state.kanbanCards.filter(c => c.column === col.id);
+    colDiv.innerHTML = `<h3>${col.title} <span class="count">${cards.length}</span></h3>`;
+    cards.forEach(card => colDiv.appendChild(renderCard(card, colIdx)));
+    colDiv.addEventListener('dragover', e => { e.preventDefault(); colDiv.classList.add('drag-over'); });
+    colDiv.addEventListener('dragleave', () => colDiv.classList.remove('drag-over'));
+    colDiv.addEventListener('drop', e => {
+      e.preventDefault();
+      colDiv.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain');
+      moveCard(id, col.id);
+    });
+    root.appendChild(colDiv);
+  });
+}
+
+function renderCard(card, colIdx) {
+  const el = document.createElement('div');
+  el.className = 'card' + (card.hobby ? ' hobby-' + card.hobby : '');
+  el.draggable = true;
+  el.dataset.id = card.id;
+  const linkedTask = card.taskId ? state.tasks.find(t => t.id === card.taskId) : null;
+  const deadline = linkedTask?.deadline;
+  const isDone = card.column === 'done';
+  let metaHtml = '';
+  if (card.hobby) {
+    const label = card.hobby === 'dj' ? 'Диджеинг' : 'Программы';
+    metaHtml += `<span class="badge ${card.hobby}">${label}</span>`;
+  } else {
+    metaHtml += `<span class="badge">Канбан</span>`;
+  }
+  if (deadline) metaHtml += `<span>до ${formatRu(deadline)}</span>`;
+  const canLeft = colIdx > 0;
+  const canRight = colIdx < COLUMNS.length - 1;
+  el.innerHTML = `
+    <div class="title" style="${isDone ? 'text-decoration:line-through;opacity:.6' : ''}">${escapeHtml(card.title)}</div>
+    <div class="meta">${metaHtml}</div>
+    <div class="move-row">
+      <div class="move-btns">
+        <button class="move-btn" ${canLeft ? '' : 'disabled'} title="Влево" onclick="window.moveCardBy('${card.id}', -1)">←</button>
+        <button class="move-btn" ${canRight ? '' : 'disabled'} title="Вправо" onclick="window.moveCardBy('${card.id}', 1)">→</button>
+      </div>
+      <button class="del-btn" title="Удалить" onclick="window.deleteCard('${card.id}')">🗑</button>
+    </div>
+  `;
+  el.addEventListener('dragstart', e => {
+    if (e.dataTransfer) e.dataTransfer.setData('text/plain', card.id);
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  return el;
+}
+
+function moveCardBy(cardId, delta) {
+  const card = state.kanbanCards.find(c => c.id === cardId);
+  if (!card) return;
+  const idx = COLUMNS.findIndex(c => c.id === card.column);
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= COLUMNS.length) return;
+  moveCard(cardId, COLUMNS[newIdx].id);
+}
+
+function moveCard(cardId, targetCol) {
+  const card = state.kanbanCards.find(c => c.id === cardId);
+  if (!card || card.column === targetCol) return;
+  card.column = targetCol;
+  if (card.taskId) {
+    const task = state.tasks.find(t => t.id === card.taskId);
+    if (task) task.done = (targetCol === 'done');
+  }
+  saveState();
+  renderKanban();
+}
+
+function addKanbanCard() {
+  const title = prompt('Название карточки:');
+  if (!title || !title.trim()) return;
+  state.kanbanCards.push({ id: uid(), title: title.trim(), column: 'idea', taskId: null, hobby: null });
+  saveState();
+  renderKanban();
+}
+
+function deleteCard(cardId) {
+  const card = state.kanbanCards.find(c => c.id === cardId);
+  if (!card) return;
+  if (card.taskId) {
+    if (!confirm('Это карточка задачи из «Увлечений». Удалить саму задачу?')) return;
+    state.tasks = state.tasks.filter(t => t.id !== card.taskId);
+    state.kanbanCards = state.kanbanCards.filter(c => c.taskId !== card.taskId);
+  } else {
+    if (!confirm('Удалить карточку?')) return;
+    state.kanbanCards = state.kanbanCards.filter(c => c.id !== cardId);
+  }
+  saveState();
+  renderKanban();
+  renderHobbies();
+  renderCalendar();
+}
+
+/* ============================================================
+   ДЕЛА (ПРОЕКТЫ)
+   ============================================================ */
+const PROJECT_COLUMNS = [
+  { id: 'idea',     title: 'Идея' },
+  { id: 'planned',  title: 'Запланировано' },
+  { id: 'progress', title: 'В работе' },
+  { id: 'done',     title: 'Готово' }
+];
+
+let dealsSubView = 'projects'; // 'projects' | 'kanban'
+
+function renderDeals() {
+  // Обновляем активную подвкладку
+  document.querySelectorAll('#dealsSubtabs .deals-subtab').forEach(t => {
+    t.classList.toggle('active', t.dataset.dealsView === dealsSubView);
+  });
+  document.getElementById('dealsProjectsTab').style.display = dealsSubView === 'projects' ? 'block' : 'none';
+  document.getElementById('dealsKanbanTab').style.display = dealsSubView === 'kanban' ? 'block' : 'none';
+
+  if (dealsSubView === 'projects') {
+    const kanbanEl = document.getElementById('dealsKanban');
+    const projectViewEl = document.getElementById('dealsProjectView');
+    if (state.openProjectId) {
+      kanbanEl.style.display = 'none';
+      projectViewEl.style.display = 'block';
+      renderProjectView();
+    } else {
+      kanbanEl.style.display = 'block';
+      projectViewEl.style.display = 'none';
+      renderProjectsKanban();
+    }
+  } else {
+    renderCommonKanban();
+  }
+}
+
+document.querySelectorAll('#dealsSubtabs .deals-subtab').forEach(t => {
+  t.addEventListener('click', () => {
+    dealsSubView = t.dataset.dealsView;
+    state.openProjectId = null;
+    renderDeals();
+  });
+});
+
+/* ============================================================
+   ОБЩИЙ КАНБАН «ДЕЛА»
+   ============================================================ */
+function renderCommonKanban() {
+  const root = document.getElementById('commonKanban');
+  if (!root) return;
+  root.innerHTML = '';
+
+  PROJECT_COLUMNS.forEach(col => {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'column';
+    colDiv.dataset.col = col.id;
+
+    // Собираем все задачи всех проектов с этой колонкой
+    const allTasks = [];
+    state.projects.forEach(p => {
+      (p.subtasks || []).forEach(st => {
+        if (st.column === col.id) {
+          allTasks.push({ project: p, subtask: st });
+        }
+      });
+    });
+
+    colDiv.innerHTML = `<h3>${col.title} <span class="count">${allTasks.length}</span></h3>`;
+    allTasks.forEach(({ project, subtask }) => colDiv.appendChild(renderCommonCard(project, subtask)));
+
+    colDiv.addEventListener('dragover', e => { e.preventDefault(); colDiv.classList.add('drag-over'); });
+    colDiv.addEventListener('dragleave', () => colDiv.classList.remove('drag-over'));
+    colDiv.addEventListener('drop', e => {
+      e.preventDefault();
+      colDiv.classList.remove('drag-over');
+      const data = e.dataTransfer.getData('text/plain');
+      const [projectId, subtaskId] = data.split('::');
+      window.moveSubtaskToColumn(projectId, subtaskId, col.id);
+    });
+
+    root.appendChild(colDiv);
+  });
+}
+
+function renderCommonCard(p, st) {
+  const el = document.createElement('div');
+  const hobbyCls = p.hobby ? ' hobby-' + p.hobby : '';
+  el.className = 'card' + hobbyCls + (st.done ? ' card-done' : '');
+  el.draggable = true;
+  el.dataset.id = p.id + '::' + st.id;
+
+  let hobbyBadge = '';
+  if (p.hobby === 'dj') hobbyBadge = `<span class="badge dj">🎧 Диджеинг</span>`;
+  else if (p.hobby === 'code') hobbyBadge = `<span class="badge code">💻 Программы</span>`;
+
+  el.innerHTML = `
+    <div class="title" style="${st.done ? 'text-decoration:line-through;opacity:.6' : ''}">${escapeHtml(st.title)}</div>
+    <div class="meta">
+      <span class="badge project">📁 ${escapeHtml(p.title)}</span>
+      ${hobbyBadge}
+      ${st.deadline ? `<span>до ${formatRu(st.deadline)}</span>` : ''}
+    </div>
+    <div class="move-row" style="justify-content:space-between;">
+      <button class="open-btn" style="flex:1;margin:0;" onclick="event.stopPropagation(); window.openProject('${p.id}')">Открыть проект →</button>
+    </div>
+  `;
+
+  el.addEventListener('dragstart', e => {
+    if (e.dataTransfer) e.dataTransfer.setData('text/plain', p.id + '::' + st.id);
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+
+  return el;
+}
+
+function renderProjectsKanban() {
+  const root = document.getElementById('projectsKanban');
+  if (!root) return;
+  root.innerHTML = '';
+  PROJECT_COLUMNS.forEach((col, colIdx) => {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'column';
+    colDiv.dataset.col = col.id;
+    const projects = state.projects.filter(p => p.column === col.id);
+    colDiv.innerHTML = `<h3>${col.title} <span class="count">${projects.length}</span></h3>`;
+    projects.forEach(p => colDiv.appendChild(renderProjectCard(p, colIdx)));
+    colDiv.addEventListener('dragover', e => { e.preventDefault(); colDiv.classList.add('drag-over'); });
+    colDiv.addEventListener('dragleave', () => colDiv.classList.remove('drag-over'));
+    colDiv.addEventListener('drop', e => {
+      e.preventDefault();
+      colDiv.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain');
+      moveProject(id, col.id);
+    });
+    root.appendChild(colDiv);
+  });
+}
+
+function renderProjectCard(p, colIdx) {
+  const el = document.createElement('div');
+  el.className = 'card project-card';
+  el.draggable = true;
+  el.dataset.id = p.id;
+
+  const subtasks = p.subtasks || [];
+  const doneCount = subtasks.filter(s => s.done).length;
+  const total = subtasks.length;
+  const allDone = total > 0 && doneCount === total;
+  const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  const canLeft = colIdx > 0;
+  const canRight = colIdx < PROJECT_COLUMNS.length - 1;
+
+  let badgeHtml = '';
+  if (p.hobby === 'dj') badgeHtml = `<span class="badge dj">🎧 Диджеинг</span>`;
+  else if (p.hobby === 'code') badgeHtml = `<span class="badge code">💻 Программы</span>`;
+
+  // Счётчик
+  let counterHtml = '';
+  if (total === 0) {
+    counterHtml = `<span class="progress-count">Нет задач</span>`;
+  } else if (allDone) {
+    counterHtml = `<span class="progress-count all-done">✓ ${doneCount} / ${total} (100%)</span>`;
+  } else {
+    counterHtml = `<span class="progress-count">✓ ${doneCount} / ${total} (${percent}%)</span>`;
+  }
+
+  // Линия прогресса
+  const progressHtml = buildProgressLine(p, doneCount, total);
+
+  el.innerHTML = `
+    <div class="title">${escapeHtml(p.title)}</div>
+    <div class="meta">
+      ${badgeHtml}
+      ${counterHtml}
+    </div>
+    ${progressHtml}
+    <button class="open-btn" onclick="event.stopPropagation(); window.openProject('${p.id}')">Открыть →</button>
+    <div class="move-row">
+      <div class="move-btns">
+        <button class="move-btn" ${canLeft ? '' : 'disabled'} onclick="event.stopPropagation(); window.moveProjectBy('${p.id}', -1)">←</button>
+        <button class="move-btn" ${canRight ? '' : 'disabled'} onclick="event.stopPropagation(); window.moveProjectBy('${p.id}', 1)">→</button>
+      </div>
+      <button class="del-btn" onclick="event.stopPropagation(); window.deleteProject('${p.id}')">🗑</button>
+    </div>
+  `;
+
+  el.addEventListener('dragstart', e => {
+    if (e.dataTransfer) e.dataTransfer.setData('text/plain', p.id);
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  return el;
+}
+
+function renderHobbyProjectsSection(container) {
+  const hobby = state.activeHobby;
+  const hobbyProjects = state.projects.filter(p => p.hobby === hobby);
+
+  container.innerHTML = `
+    <div style="margin-bottom:14px;">
+      <button onclick="window.addHobbyProject()">+ Проект (${hobby === 'dj' ? '🎧 Диджеинг' : '💻 Программы'})</button>
+    </div>
+    <div class="kanban" id="hobbyProjectsKanban"></div>
+  `;
+
+  const root = document.getElementById('hobbyProjectsKanban');
+  PROJECT_COLUMNS.forEach((col, colIdx) => {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'column';
+    colDiv.dataset.col = col.id;
+    const projects = hobbyProjects.filter(p => p.column === col.id);
+    colDiv.innerHTML = `<h3>${col.title} <span class="count">${projects.length}</span></h3>`;
+    projects.forEach(p => colDiv.appendChild(renderProjectCard(p, colIdx)));
+    colDiv.addEventListener('dragover', e => { e.preventDefault(); colDiv.classList.add('drag-over'); });
+    colDiv.addEventListener('dragleave', () => colDiv.classList.remove('drag-over'));
+    colDiv.addEventListener('drop', e => {
+      e.preventDefault();
+      colDiv.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain');
+      moveProject(id, col.id);
+    });
+    root.appendChild(colDiv);
+  });
+}
+
+function addHobbyProject() {
+  const title = prompt('Название проекта:');
+  if (!title || !title.trim()) return;
+  const hobby = state.activeHobby;
+  state.projects.push({
+    id: uid(),
+    title: title.trim(),
+    column: 'idea',
+    hobby: hobby,
+    subtasks: [],
+    createdAt: Date.now()
+  });
+  saveState();
+  renderHobbies();
+}
+
+function buildProgressLine(p, doneCount, total) {
+  if (total === 0) return '';
+
+  const subtasks = p.subtasks || [];
+  const allDone = doneCount === total;
+
+  // Определяем последовательность точек
+  let points, nums;
+  if (allDone) {
+    points = ['all-done', 'all-done'];
+    nums = [String(doneCount), '✓'];
+  } else {
+    const numPoints = total < 4 ? 3 : 4;
+    nums = computeProgressNumbers(subtasks, total, numPoints).map(String);
+    if (numPoints === 3) {
+      points = ['done', 'current', 'finish'];
+    } else {
+      points = ['done', 'current', 'next', 'finish'];
+    }
+  }
+
+  // Строим CSS grid-template-columns:
+  // для N точек: точка, линия, точка, линия, ..., точка
+  // То есть: 12px 1fr 12px 1fr 12px ... (всего N точек и N-1 линий)
+  const cols = [];
+  points.forEach((_, i) => {
+    cols.push('12px');
+    if (i < points.length - 1) cols.push('1fr');
+  });
+  const gridTemplate = cols.join(' ');
+
+  // Ячейки для линии
+  let lineHtml = '';
+  points.forEach((cls, i) => {
+    lineHtml += `<div class="pl-point ${cls}"></div>`;
+    if (i < points.length - 1) {
+      const segCls = (i === 0 && !allDone) || (allDone) ? 'done' : '';
+      lineHtml += `<div class="pl-segment ${segCls}"></div>`;
+    }
+  });
+
+  // Ячейки для цифр — то же grid-template-columns, но на месте линий пустые spacer-ячейки
+  let numsHtml = '';
+  nums.forEach((n, i) => {
+    numsHtml += `<span class="pl-num">${n}</span>`;
+    if (i < nums.length - 1) numsHtml += `<span></span>`;
+  });
+
+  return `
+    <div class="progress-line-wrap">
+      <div class="progress-line" style="grid-template-columns:${gridTemplate};">${lineHtml}</div>
+      <div class="pl-nums" style="grid-template-columns:${gridTemplate};">${numsHtml}</div>
+    </div>
+  `;
+}
+function computeProgressNumbers(subtasks, total, numPoints) {
+  const sorted = [...subtasks].sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+  const doneCount = sorted.filter(s => s.done).length;
+  const currentIdx = sorted.findIndex(s => !s.done);
+
+  if (numPoints === 3) {
+    // Выполнено → Текущая → Финиш
+    const currentNum = currentIdx >= 0 ? (currentIdx + 1) : total;
+    return [doneCount, currentNum, total];
+  } else {
+    // Выполнено → Текущая → Следующая → Остаток
+    const currentNum = currentIdx >= 0 ? (currentIdx + 1) : total;
+    const nextNum = Math.min(currentNum + 1, total);
+    const afterNext = Math.max(0, total - nextNum);
+    return [doneCount, currentNum, nextNum, afterNext];
+  }
+}
+
+function moveProjectBy(projectId, delta) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  const idx = PROJECT_COLUMNS.findIndex(c => c.id === p.column);
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= PROJECT_COLUMNS.length) return;
+  moveProject(projectId, PROJECT_COLUMNS[newIdx].id);
+}
+
+function moveProject(projectId, targetCol) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p || p.column === targetCol) return;
+  p.column = targetCol;
+  saveState();
+  renderProjectsKanban();
+}
+
+function addProject() {
+  const title = prompt('Название проекта:');
+  if (!title || !title.trim()) return;
+  state.projects.push({
+    id: uid(),
+    title: title.trim(),
+    column: 'idea',
+    hobby: null,
+    subtasks: [],
+    createdAt: Date.now()
+  });
+  saveState();
+  renderProjectsKanban();
+}
+
+function deleteProject(id) {
+  const p = state.projects.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Удалить проект «${p.title}» и все его задачи?`)) return;
+  state.projects = state.projects.filter(x => x.id !== id);
+  if (state.openProjectId === id) state.openProjectId = null;
+  saveState();
+  renderDeals();
+}
+
+function openProject(id) {
+  state.openProjectId = id;
+  dealsSubView = 'projects'; // всегда проекты при открытии
+  saveState();
+  // Переключаем вкладку на «Дела», чтобы пользователь увидел проект
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const dealsTab = document.querySelector('.tab[data-view="deals"]');
+  if (dealsTab) dealsTab.classList.add('active');
+  document.getElementById('view-deals').classList.add('active');
+  renderDeals();
+}
+
+function closeProject() {
+  state.openProjectId = null;
+  saveState();
+  renderDeals();
+}
+
+/* ============================================================
+   СТРАНИЦА ПРОЕКТА
+   ============================================================ */
+function renderProjectView() {
+  const el = document.getElementById('dealsProjectView');
+  const p = state.projects.find(x => x.id === state.openProjectId);
+  if (!p) {
+    state.openProjectId = null;
+    renderDeals();
+    return;
+  }
+
+  const subtasks = p.subtasks || [];
+  const doneCount = subtasks.filter(s => s.done).length;
+
+  el.innerHTML = `
+    <div class="project-view">
+      <div class="pv-head">
+        <button class="pv-back" onclick="window.closeProject()">← Назад</button>
+        <h2 class="pv-title">${escapeHtml(p.title)}</h2>
+        <span style="color:var(--muted);font-size:13px;">✓ ${doneCount} / ${subtasks.length}</span>
+      </div>
+
+      <div class="pv-status">
+        ${PROJECT_COLUMNS.map(c => `
+          <button class="${p.column === c.id ? 'active' : ''}"
+                  onclick="window.setProjectStatus('${p.id}', '${c.id}')">${c.title}</button>
+        `).join('')}
+      </div>
+
+      <div class="pv-hobby">
+        <span>Хобби:</span>
+        <select onchange="window.setProjectHobby('${p.id}', this.value)">
+          <option value="" ${!p.hobby ? 'selected' : ''}>Без привязки</option>
+          <option value="dj" ${p.hobby === 'dj' ? 'selected' : ''}>🎧 Диджеинг</option>
+          <option value="code" ${p.hobby === 'code' ? 'selected' : ''}>💻 Программы</option>
+        </select>
+      </div>
+
+      <div class="project-kanban" id="projectKanban"></div>
+    </div>
+  `;
+
+  renderProjectKanban(p);
+}
+
+function renderProjectKanban(p) {
+  const root = document.getElementById('projectKanban');
+  if (!root) return;
+  root.innerHTML = '';
+
+  PROJECT_COLUMNS.forEach(col => {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'column';
+    colDiv.dataset.col = col.id;
+    colDiv.dataset.projectId = p.id;
+
+    const tasks = (p.subtasks || []).filter(st => st.column === col.id);
+    colDiv.innerHTML = `<h3>${col.title} <span class="count">${tasks.length}</span></h3>`;
+
+    tasks.forEach(st => colDiv.appendChild(renderSubtaskCard(p.id, st)));
+
+    // Кнопка + в колонке
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-col-btn';
+    addBtn.textContent = '+ Задача';
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.addSubtaskToColumn(p.id, col.id);
+    });
+    colDiv.appendChild(addBtn);
+
+    colDiv.addEventListener('dragover', e => { e.preventDefault(); colDiv.classList.add('drag-over'); });
+    colDiv.addEventListener('dragleave', () => colDiv.classList.remove('drag-over'));
+    colDiv.addEventListener('drop', e => {
+      e.preventDefault();
+      colDiv.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain');
+      window.moveSubtaskToColumn(p.id, id, col.id);
+    });
+
+    root.appendChild(colDiv);
+  });
+}
+
+function renderSubtaskCard(projectId, st) {
+  const el = document.createElement('div');
+  el.className = 'st-card' + (st.done ? ' done' : '');
+  el.draggable = true;
+  el.dataset.id = st.id;
+
+  const subs = st.subtasks || [];
+  const hasSubs = subs.length > 0;
+
+  el.innerHTML = `
+    <div class="st-head">
+      <div class="checkbox ${st.done ? 'checked' : ''}" onclick="window.toggleSubtask('${projectId}', '${st.id}')">${st.done ? '✓' : ''}</div>
+      <span class="st-title">${escapeHtml(st.title)}</span>
+      <div class="st-actions">
+        ${hasSubs ? `<button onclick="window.toggleSubsub('${projectId}', '${st.id}')" title="Подзадачи">▾ ${subs.length}</button>` : `<button onclick="window.toggleSubsub('${projectId}', '${st.id}')" title="Добавить подзадачу">+</button>`}
+        <button class="del" onclick="window.deleteSubtask('${projectId}', '${st.id}')">✕</button>
+      </div>
+    </div>
+    ${st.deadline ? `<span class="st-deadline">до ${formatRu(st.deadline)}</span>` : ''}
+    <div class="subsub-list" id="subsub-${st.id}" style="display:none;">
+      ${subs.map(ss => `
+        <div class="subsub ${ss.done ? 'done' : ''}">
+          <div class="checkbox ${ss.done ? 'checked' : ''}" style="width:18px;height:18px;font-size:11px;"
+               onclick="window.toggleSubsubDone('${projectId}', '${st.id}', '${ss.id}')">${ss.done ? '✓' : ''}</div>
+          <span class="ss-title">${escapeHtml(ss.title)}</span>
+          <button class="ss-del" onclick="window.deleteSubsub('${projectId}', '${st.id}', '${ss.id}')">✕</button>
+        </div>
+      `).join('')}
+      <div class="add-row">
+        <input type="text" placeholder="Подзадача..." id="ss-input-${st.id}" style="font-size:12px;padding:5px 8px;min-height:30px;">
+        <button style="font-size:11px;padding:5px 10px;" onclick="window.addSubsub('${projectId}', '${st.id}')">+</button>
+      </div>
+    </div>
+  `;
+
+  el.addEventListener('dragstart', e => {
+    if (e.dataTransfer) e.dataTransfer.setData('text/plain', st.id);
+    el.classList.add('dragging');
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+
+  // Если есть подзадачи — раскрываем сразу
+  if (hasSubs) {
+    setTimeout(() => {
+      const subsub = document.getElementById('subsub-' + st.id);
+      if (subsub) subsub.style.display = 'flex';
+    }, 0);
+  }
+
+  return el;
+}
+function setProjectStatus(projectId, status) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  p.column = status;
+  saveState();
+  renderProjectView();
+}
+
+function setProjectHobby(projectId, hobby) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  p.hobby = hobby || null;
+  saveState();
+  renderProjectView();
+}
+
+let subtaskModalCtx = null; // { projectId, column }
+
+function addSubtaskToColumn(projectId, column) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  subtaskModalCtx = { projectId, column };
+  const modal = document.getElementById('subtaskModal');
+  const titleInput = document.getElementById('subtaskTitleInput');
+  const dateInput = document.getElementById('subtaskDateInput');
+  const modalTitle = document.getElementById('subtaskModalTitle');
+  titleInput.value = '';
+  dateInput.value = '';
+  const colLabel = PROJECT_COLUMNS.find(c => c.id === column)?.title || '';
+  modalTitle.textContent = `Новая задача — ${colLabel}`;
+  modal.classList.add('active');
+  setTimeout(() => titleInput.focus(), 50);
+}
+
+function closeSubtaskModal() {
+  document.getElementById('subtaskModal').classList.remove('active');
+  subtaskModalCtx = null;
+}
+
+function saveSubtaskModal() {
+  console.log('[saveSubtaskModal] ctx =', subtaskModalCtx);
+  if (!subtaskModalCtx) {
+    console.warn('[saveSubtaskModal] нет контекста');
+    return;
+  }
+  const { projectId, column } = subtaskModalCtx;
+  const p = state.projects.find(x => x.id === projectId);
+  console.log('[saveSubtaskModal] project =', p);
+  if (!p) { closeSubtaskModal(); return; }
+  const title = document.getElementById('subtaskTitleInput').value.trim();
+  const deadline = document.getElementById('subtaskDateInput').value || null;
+  if (!title) { toast('Введите название задачи', 'bad'); return; }
+  if (!p.subtasks) p.subtasks = [];
+  p.subtasks.push({
+    id: uid(),
+    title,
+    deadline,
+    done: column === 'done',
+    column: column,
+    subtasks: []
+  });
+  console.log('[saveSubtaskModal] пушим задачу. Всего:', p.subtasks.length);
+  saveState();
+  closeSubtaskModal();
+  renderProjectView();
+}
+
+function moveSubtaskToColumn(projectId, subtaskId, column) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  const st = (p.subtasks || []).find(s => s.id === subtaskId);
+  if (!st || st.column === column) return;
+  st.column = column;
+  st.done = (column === 'done');
+  saveState();
+  // Перерисовываем в зависимости от того, что открыто
+  if (dealsSubView === 'kanban') {
+    renderCommonKanban();
+  } else if (state.openProjectId === projectId) {
+    renderProjectView();
+  }
+}
+
+
+function toggleSubtask(projectId, subtaskId) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  const st = p.subtasks.find(s => s.id === subtaskId);
+  if (!st) return;
+  st.done = !st.done;
+  if (st.done) {
+    st.column = 'done';
+  } else if (st.column === 'done') {
+    st.column = 'progress';
+  }
+  saveState();
+  renderProjectView();
+}
+
+function deleteSubtask(projectId, subtaskId) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  if (!confirm('Удалить задачу и все её подзадачи?')) return;
+  p.subtasks = p.subtasks.filter(s => s.id !== subtaskId);
+  saveState();
+  renderProjectView();
+}
+
+function toggleSubsub(projectId, subtaskId) {
+  const el = document.getElementById('subsub-' + subtaskId);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+function addSubsub(projectId, subtaskId) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  const st = p.subtasks.find(s => s.id === subtaskId);
+  if (!st) return;
+  const input = document.getElementById('ss-input-' + subtaskId);
+  const title = input.value.trim();
+  if (!title) return;
+  if (!st.subtasks) st.subtasks = [];
+  st.subtasks.push({ id: uid(), title, done: false });
+  saveState();
+  renderProjectView();
+}
+
+function toggleSubsubDone(projectId, subtaskId, subsubId) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  const st = p.subtasks.find(s => s.id === subtaskId);
+  if (!st) return;
+  const ss = (st.subtasks || []).find(x => x.id === subsubId);
+  if (!ss) return;
+  ss.done = !ss.done;
+  saveState();
+  renderProjectView();
+}
+
+function deleteSubsub(projectId, subtaskId, subsubId) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  const st = p.subtasks.find(s => s.id === subtaskId);
+  if (!st) return;
+  st.subtasks = (st.subtasks || []).filter(x => x.id !== subsubId);
+  saveState();
+  renderProjectView();
+}
+
+/* ============================================================
+   УВЛЕЧЕНИЯ
+   ============================================================ */
+const SECTIONS = {
+  dj: [
+    { id: 'tasks',    label: 'Задачи' },
+    { id: 'projects', label: 'Проекты' },
+    { id: 'learning', label: 'Обучение' },
+    { id: 'collection', label: 'Коллекция' },
+    { id: 'works',    label: 'Работы' }
+  ],
+  code: [
+    { id: 'tasks',    label: 'Задачи' },
+    { id: 'projects', label: 'Проекты' },
+    { id: 'inProgress', label: 'В работе' },
+    { id: 'finished',   label: 'Завершённые' }
+  ]
+};
+
+document.querySelectorAll('#subtabs .subtab').forEach(st => {
+  st.addEventListener('click', () => {
+    state.activeHobby = st.dataset.hobby;
+    saveState();
+    renderHobbies();
+  });
+});
+
+function renderHobbies() {
+  document.querySelectorAll('#subtabs .subtab').forEach(st => {
+    st.classList.toggle('active', st.dataset.hobby === state.activeHobby);
+  });
+  const tabsEl = document.getElementById('sectionTabs');
+  tabsEl.innerHTML = '';
+  const sections = SECTIONS[state.activeHobby];
+  const activeSec = state.activeSection[state.activeHobby] || sections[0].id;
+  sections.forEach(s => {
+    const el = document.createElement('div');
+    el.className = 'subtab section' + (s.id === activeSec ? ' active' : '');
+    el.textContent = s.label;
+    el.addEventListener('click', () => {
+      state.activeSection[state.activeHobby] = s.id;
+      saveState();
+      renderHobbies();
+    });
+    tabsEl.appendChild(el);
+  });
+  const body = document.getElementById('sectionBody');
+  body.innerHTML = '';
+  if (activeSec === 'tasks') renderTasksSection(body);
+  else if (activeSec === 'projects') renderHobbyProjectsSection(body);
+  else if (activeSec === 'learning' || activeSec === 'collection') {
+    renderStub(body, activeSec === 'learning' ? 'Дорожная карта обучения' : 'Музыкальная коллекция');
+  } else if (activeSec === 'works') renderWorksSection(body);
+  else if (activeSec === 'inProgress') renderProgramsSection(body, false);
+  else if (activeSec === 'finished') renderProgramsSection(body, true);
+}
+
+function renderTasksSection(container) {
+  container.innerHTML = `
+    <div class="hobby-form">
+      <input type="text" id="hobbyTaskText" placeholder="Новая задача...">
+      <input type="date" id="hobbyTaskDate">
+      <button onclick="window.addHobbyTask()">Добавить</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Задача</th>
+          <th style="width:160px;">Дедлайн</th>
+          <th style="width:120px; text-align:center;">Выполнено</th>
+          <th style="width:80px;"></th>
+        </tr>
+      </thead>
+      <tbody id="hobbyTable"></tbody>
+    </table>
+  `;
+  const tbody = document.getElementById('hobbyTable');
+  const tasks = state.tasks.filter(t => t.hobby === state.activeHobby);
+  if (tasks.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty">Пока нет задач. Добавь первую!</div></td></tr>`;
+    return;
+  }
+  tasks.sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'))
+    .forEach(task => {
+      const tr = document.createElement('tr');
+      if (task.done) tr.classList.add('row-done');
+      tr.innerHTML = `
+        <td>${escapeHtml(task.title)}</td>
+        <td>${task.deadline ? formatRu(task.deadline) : '—'}</td>
+        <td class="done-cell">
+          <div class="checkbox ${task.done ? 'checked' : ''}" onclick="window.toggleTaskDone('${task.id}')">${task.done ? '✓' : ''}</div>
+        </td>
+        <td class="actions-cell"><button class="ghost mini" onclick="window.deleteTask('${task.id}')">🗑</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+}
+
+function addHobbyTask() {
+  const textEl = document.getElementById('hobbyTaskText');
+  const dateEl = document.getElementById('hobbyTaskDate');
+  const title = textEl.value.trim();
+  if (!title) return;
+  const task = { id: uid(), title, deadline: dateEl.value || null, done: false, hobby: state.activeHobby };
+  state.tasks.push(task);
+  state.kanbanCards.push({ id: uid(), title: task.title, column: 'idea', taskId: task.id, hobby: task.hobby });
+  saveState();
+  renderHobbies();
+}
+
+function toggleTaskDone(taskId) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  task.done = !task.done;
+  const card = state.kanbanCards.find(c => c.taskId === taskId);
+  if (card) {
+    if (task.done) card.column = 'done';
+    else if (card.column === 'done') card.column = 'progress';
+  }
+  saveState();
+  renderHobbies();
+}
+
+function deleteTask(taskId) {
+  if (!confirm('Удалить задачу? Карточка на Канбане тоже удалится.')) return;
+  state.tasks = state.tasks.filter(t => t.id !== taskId);
+  state.kanbanCards = state.kanbanCards.filter(c => c.taskId !== taskId);
+  saveState();
+  renderHobbies();
+  renderKanban();
+  renderCalendar();
+}
+
+function renderWorksSection(container) {
+  container.innerHTML = `
+    <div class="hobby-form">
+      <input type="text" id="workTitle" placeholder="Название работы...">
+      <input type="date" id="workDate">
+      <button onclick="window.addWork()">Добавить</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:48px;">№</th>
+          <th>Название</th>
+          <th style="width:150px;">Дата записи</th>
+          <th style="width:80px; text-align:center;">Ссылка</th>
+          <th style="width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody id="worksTable"></tbody>
+    </table>
+  `;
+  renderWorksRows();
+}
+
+function renderWorksRows() {
+  const tbody = document.getElementById('worksTable');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const works = [...state.works].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (works.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty">Пока нет записанных работ</div></td></tr>`;
+    return;
+  }
+  works.forEach((w, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="num-cell">${i + 1}</td>
+      <td>${escapeHtml(w.title)}</td>
+      <td>${w.date ? formatRu(w.date) : '—'}</td>
+      <td style="text-align:center;">${renderLinkButton(w.id, 'work', w.url)}</td>
+      <td class="actions-cell"><button class="ghost mini" onclick="window.deleteWork('${w.id}')">🗑</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function addWork() {
+  const titleEl = document.getElementById('workTitle');
+  const dateEl = document.getElementById('workDate');
+  const title = titleEl.value.trim();
+  if (!title) return;
+  state.works.push({ id: uid(), title, date: dateEl.value || null, url: '' });
+  titleEl.value = '';
+  dateEl.value = '';
+  saveState();
+  renderWorksRows();
+}
+
+function deleteWork(id) {
+  if (!confirm('Удалить работу?')) return;
+  state.works = state.works.filter(w => w.id !== id);
+  saveState();
+  renderWorksRows();
+}
+
+function renderProgramsSection(container, done) {
+  container.innerHTML = `
+    <div class="hobby-form">
+      <input type="text" id="progTitle" placeholder="Название программы...">
+      <button onclick="window.addProgram(${done})">Добавить</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Название</th>
+          <th style="width:80px; text-align:center;">Ссылка</th>
+          <th style="width:150px; text-align:center;">Статус</th>
+          <th style="width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody id="progTable"></tbody>
+    </table>
+  `;
+  renderProgramsRows(done);
+}
+
+function renderProgramsRows(done) {
+  const tbody = document.getElementById('progTable');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const items = state.programs
+    .filter(p => !!p.done === done)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty">${done ? 'Пока нет завершённых программ' : 'Пока нет программ в работе'}</div></td></tr>`;
+    return;
+  }
+  items.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(p.title)}</td>
+      <td style="text-align:center;">${renderLinkButton(p.id, 'program', p.url)}</td>
+      <td style="text-align:center;">
+        <button class="ghost mini" onclick="window.toggleProgramDone('${p.id}')">
+          ${p.done ? '↩ Вернуть' : '✓ Завершить'}
+        </button>
+      </td>
+      <td class="actions-cell"><button class="ghost mini" onclick="window.deleteProgram('${p.id}')">🗑</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function addProgram(done) {
+  const el = document.getElementById('progTitle');
+  const title = el.value.trim();
+  if (!title) return;
+  state.programs.push({ id: uid(), title, url: '', done: !!done, createdAt: Date.now() });
+  el.value = '';
+  saveState();
+  renderProgramsRows(done);
+}
+
+function toggleProgramDone(id) {
+  const p = state.programs.find(x => x.id === id);
+  if (!p) return;
+  p.done = !p.done;
+  saveState();
+  renderHobbies();
+}
+
+function deleteProgram(id) {
+  if (!confirm('Удалить программу?')) return;
+  state.programs = state.programs.filter(p => p.id !== id);
+  saveState();
+  renderHobbies();
+}
+
+/* ============================================================
+   ССЫЛКИ
+   ============================================================ */
+let linkModalCtx = null;
+
+function renderLinkButton(entityId, entityType, url) {
+  const hasLink = url && url.trim();
+  const safeUrl = hasLink ? escapeHtml(url) : '';
+  if (hasLink) {
+    return `<a class="link-btn has-link" href="${safeUrl}" target="_blank" rel="noopener" title="${safeUrl}">🔗</a>`;
+  }
+  return `<button class="link-btn" title="Добавить ссылку" onclick="window.openLinkModal('${entityId}', '${entityType}')">🔗</button>`;
+}
+
+function openLinkModal(entityId, entityType) {
+  linkModalCtx = { entityId, entityType };
+  const modal = document.getElementById('linkModal');
+  const input = document.getElementById('linkModalInput');
+  input.value = '';
+  modal.classList.add('active');
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeLinkModal() {
+  document.getElementById('linkModal').classList.remove('active');
+  linkModalCtx = null;
+}
+
+function saveLinkModal() {
+  if (!linkModalCtx) return;
+  let url = document.getElementById('linkModalInput').value.trim();
+  if (!url) { closeLinkModal(); return; }
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  const { entityId, entityType } = linkModalCtx;
+  if (entityType === 'work') {
+    const w = state.works.find(x => x.id === entityId);
+    if (w) w.url = url;
+  } else if (entityType === 'program') {
+    const p = state.programs.find(x => x.id === entityId);
+    if (p) p.url = url;
+  }
+  saveState();
+  closeLinkModal();
+  renderHobbies();
+}
+
+document.getElementById('linkModalInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveLinkModal();
+  if (e.key === 'Escape') closeLinkModal();
+});
+
+document.getElementById('eventTitleInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveEventModal();
+  if (e.key === 'Escape') closeEventModal();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const active = document.activeElement;
+  if (!active) return;
+  if (active.id === 'ss-input-') return;
+  if (active.id && active.id.startsWith('ss-input-')) {
+    e.preventDefault();
+    const subtaskId = active.id.replace('ss-input-', '');
+    if (state.openProjectId) addSubsub(state.openProjectId, subtaskId);
+  } else if (active.id === 'subtaskTitleInput') {
+    e.preventDefault();
+    saveSubtaskModal();
+  }
+});
+
+document.getElementById('subtaskTitleInput').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSubtaskModal();
+});
+
+function renderStub(container, title) {
+  container.innerHTML = `
+    <div class="stub">
+      <div class="big">🚧</div>
+      <div style="font-weight:600; color:var(--text); margin-bottom:6px;">${escapeHtml(title)}</div>
+      <div>В разработке. Загляни позже.</div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   КАЛЕНДАРЬ
+   ============================================================ */
+let calRange = 'week';
+let calAnchor = todayISO();
+
+document.querySelectorAll('#calSeg button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#calSeg button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    calRange = btn.dataset.range;
+    renderCalendar();
+  });
+});
+
+function calShift(dir) {
+  const d = fromISO(calAnchor);
+  if (calRange === 'week') d.setDate(d.getDate() + 7 * dir);
+  else if (calRange === 'month') d.setMonth(d.getMonth() + dir);
+  else d.setFullYear(d.getFullYear() + dir);
+  calAnchor = toISO(d);
+  renderCalendar();
+}
+function calToday() { calAnchor = todayISO(); renderCalendar(); }
+
+function renderCalendar() {
+  const grid = document.getElementById('calGrid');
+  const title = document.getElementById('calTitle');
+  grid.className = 'cal-grid ' + calRange;
+  grid.innerHTML = '';
+  const today = todayISO();
+  const map = {};
+  state.tasks.forEach(t => {
+    if (!t.deadline) return;
+    (map[t.deadline] = map[t.deadline] || []).push(t);
+  });
+  if (calRange === 'week') {
+    const base = fromISO(calAnchor);
+    const dow = base.getDay();
+    const offset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(base);
+    monday.setDate(base.getDate() + offset);
+    title.textContent = `${formatRu(toISO(monday))} — ${formatRu(addDays(toISO(monday), 6))}`;
+    for (let i = 0; i < 7; i++) {
+      grid.appendChild(buildDayCell(addDays(toISO(monday), i), today, map));
+    }
+  } else if (calRange === 'month') {
+    const base = fromISO(calAnchor);
+    title.textContent = `${MONTH_RU[base.getMonth()]} ${base.getFullYear()}`;
+    const first = new Date(base.getFullYear(), base.getMonth(), 1);
+    const last  = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+    const dow = first.getDay();
+    const pad = dow === 0 ? 6 : dow - 1;
+    for (let i = 0; i < pad; i++) {
+      const d = new Date(first); d.setDate(1 - (pad - i));
+      grid.appendChild(buildDayCell(toISO(d), today, map, true));
+    }
+    for (let i = 1; i <= last.getDate(); i++) {
+      const d = new Date(base.getFullYear(), base.getMonth(), i);
+      grid.appendChild(buildDayCell(toISO(d), today, map));
+    }
+    const total = pad + last.getDate();
+    const tail = (7 - total % 7) % 7;
+    for (let i = 1; i <= tail; i++) {
+      const d = new Date(base.getFullYear(), base.getMonth() + 1, i);
+      grid.appendChild(buildDayCell(toISO(d), today, map, true));
+    }
+  } else {
+    const y = fromISO(calAnchor).getFullYear();
+    title.textContent = `${y}`;
+    for (let m = 0; m < 12; m++) {
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell';
+      cell.innerHTML = `<div class="daynum">${MONTH_RU[m]}</div>`;
+      const count = Object.keys(map).filter(iso => iso.startsWith(`${y}-${String(m+1).padStart(2,'0')}`)).length;
+      if (count) cell.innerHTML += `<div class="cal-task">${count} дедлайн(ов)</div>`;
+      grid.appendChild(cell);
+    }
+  }
+  renderUpcoming();
+}
+
+function buildDayCell(iso, today, map, other = false) {
+  const cell = document.createElement('div');
+  cell.className = 'cal-cell';
+  if (other) cell.classList.add('other');
+  if (iso === today) cell.classList.add('today');
+  const d = fromISO(iso);
+  cell.innerHTML = `<div class="daynum">${d.getDate()} ${DOW_RU[d.getDay()]}</div>`;
+  // задачи
+  (map[iso] || []).forEach(t => {
+    const el = document.createElement('div');
+    el.className = 'cal-task ' + t.hobby + (t.done ? ' done' : '');
+    el.textContent = t.title;
+    el.title = t.title;
+    cell.appendChild(el);
+  });
+  // события (клик — редактирование)
+  const events = state.events.filter(e => e.date === iso);
+  events.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  events.forEach(e => {
+    const el = document.createElement('div');
+    el.className = 'cal-task event';
+    const range = e.allDay ? '' : (e.time ? (e.endTime ? e.time + '–' + e.endTime : e.time) : '');
+    el.textContent = (range ? range + ' ' : '') + '🔔 ' + e.title;
+    el.title = e.title + (range ? ' (' + range + ')' : '') + (e.notes ? '\n' + e.notes : '');
+    el.onclick = ev => { ev.stopPropagation(); window.openEventModal(e.id); };
+    el.style.cursor = 'pointer';
+    cell.appendChild(el);
+  });
+  return cell;
+}
+
+/* ============================================================
+   СОБЫТИЯ
+   ============================================================ */
+function openEventModal(eventId) {
+  const ev = eventId ? state.events.find(e => e.id === eventId) : null;
+  document.getElementById('eventModalTitle').textContent = ev ? 'Событие' : 'Новое событие';
+  document.getElementById('eventIdInput').value = ev ? ev.id : '';
+  document.getElementById('eventTitleInput').value = ev ? (ev.title || '') : '';
+  document.getElementById('eventDateInput').value = ev ? ev.date : todayISO();
+  document.getElementById('eventTimeInput').value = ev && ev.time ? ev.time : '';
+  document.getElementById('eventEndInput').value = ev && ev.endTime ? ev.endTime : '';
+  document.getElementById('eventAllDayInput').checked = Boolean(ev && ev.allDay);
+  document.getElementById('eventNotesInput').value = ev && ev.notes ? ev.notes : '';
+  document.getElementById('eventDeleteBtn').style.display = ev ? '' : 'none';
+  syncEventAllDay();
+  document.getElementById('eventModal').classList.add('active');
+  setTimeout(() => document.getElementById('eventTitleInput').focus(), 50);
+}
+
+function syncEventAllDay() {
+  const allDay = document.getElementById('eventAllDayInput').checked;
+  document.getElementById('eventTimeInput').disabled = allDay;
+  document.getElementById('eventEndInput').disabled = allDay;
+}
+
+function initEventForm() {
+  const allDay = document.getElementById('eventAllDayInput');
+  if (allDay) allDay.addEventListener('change', syncEventAllDay);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    closeEventModal();
+    window.closeDataModal();
+    window.closeLinkModal();
+    window.closeSubtaskModal();
+  });
+}
+
+function closeEventModal() {
+  document.getElementById('eventModal').classList.remove('active');
+}
+
+function saveEventModal() {
+  const id = document.getElementById('eventIdInput').value;
+  const title = document.getElementById('eventTitleInput').value.trim();
+  const date = document.getElementById('eventDateInput').value;
+  const allDay = document.getElementById('eventAllDayInput').checked;
+  const time = allDay ? '' : document.getElementById('eventTimeInput').value;
+  const endTime = allDay ? '' : document.getElementById('eventEndInput').value;
+  const notes = document.getElementById('eventNotesInput').value.trim();
+  if (!title) { toast('Введите название события', 'bad'); return; }
+  if (!date) { toast('Выберите дату', 'bad'); return; }
+  if (time && endTime && endTime < time) { toast('Окончание раньше начала', 'bad'); return; }
+  if (id) {
+    const ev = state.events.find(e => e.id === id);
+    if (ev) Object.assign(ev, { title, date, time, endTime, allDay, notes, updatedAt: new Date().toISOString() });
+    toast('Событие обновлено', 'ok');
+  } else {
+    state.events.push({
+      id: uid(), title, date, time, endTime, allDay, notes,
+      createdAt: new Date().toISOString()
+    });
+    toast('Событие добавлено', 'ok');
+  }
+  saveState();
+  closeEventModal();
+  renderCalendar();
+  renderUpcoming();
+}
+
+function deleteEvent(id) {
+  const ev = state.events.find(e => e.id === id);
+  if (!ev) return;
+  if (!confirm('Удалить событие «' + ev.title + '»?')) return;
+  state.events = state.events.filter(e => e.id !== id);
+  saveState();
+  renderCalendar();
+  renderUpcoming();
+  toast('Событие удалено', 'ok');
+}
+
+window.deleteEventFromModal = function () {
+  const id = document.getElementById('eventIdInput').value;
+  if (!id) return;
+  closeEventModal();
+  deleteEvent(id);
+};
+
+/* ============================================================
+   БЛИЖАЙШИЕ 7 ДНЕЙ
+   ============================================================ */
+function renderUpcoming() {
+  const list = document.getElementById('upcomingList');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const today = todayISO();
+  const end = addDays(today, 7);
+
+  const items = [];
+
+  // задачи с дедлайном в диапазоне
+  state.tasks.forEach(t => {
+    if (!t.deadline) return;
+    if (t.done) return;
+    if (t.deadline < today || t.deadline > end) return;
+    items.push({
+      date: t.deadline,
+      time: '',
+      title: t.title,
+      type: 'task',
+      hobby: t.hobby
+    });
+  });
+
+  // события в диапазоне
+  state.events.forEach(e => {
+    if (e.date < today || e.date > end) return;
+    items.push({
+      id: e.id,
+      date: e.date,
+      time: e.allDay ? '' : (e.time ? (e.endTime ? e.time + '–' + e.endTime : e.time) : ''),
+      title: e.title,
+      type: 'event',
+      hobby: null
+    });
+  });
+
+  // сортировка: по дате, потом по времени
+  items.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return (a.time || '').localeCompare(b.time || '');
+  });
+
+  if (items.length === 0) {
+    list.innerHTML = `<div class="upcoming-empty">На ближайшие 7 дней ничего не запланировано</div>`;
+    return;
+  }
+
+  items.forEach(it => {
+    const el = document.createElement('div');
+    const cls = it.type === 'event' ? 'event' : (it.hobby || '');
+    el.className = 'upcoming-item ' + cls;
+    if (it.type === 'event' && it.id) {
+      el.style.cursor = 'pointer';
+      el.title = 'Открыть событие';
+      el.onclick = () => window.openEventModal(it.id);
+    }
+    const d = fromISO(it.date);
+    const dateLabel = `${d.getDate()} ${MONTH_SHORT[d.getMonth()]}, ${DOW_RU[d.getDay()]}`;
+    const icon = it.type === 'event' ? '🔔' : '📋';
+    el.innerHTML = `
+      <span class="u-date">${dateLabel}</span>
+      ${it.time ? `<span class="u-time">${it.time}</span>` : ''}
+      <span class="u-title">${escapeHtml(it.title)}</span>
+      <span class="u-icon">${icon}</span>
+    `;
+    list.appendChild(el);
+  });
+}
+
+/* ============================================================
+   ЗДОРОВЬЕ — 5 СОСТОЯНИЙ
+   ============================================================ */
+const HEALTH_STATES = [
+  { id: 'strongUp', label: '⬆ Подъём' },
+  { id: 'up',       label: '↗ Лёгкий +' },
+  { id: 'ok',       label: '● Норма' },
+  { id: 'down',     label: '↘ Лёгкий −' },
+  { id: 'strongDown', label: '⬇ Спад' }
+];
+const STATE_VALUE = { strongDown: -2, down: -1, ok: 0, up: 1, strongUp: 2 };
+
+function renderHealth() {
+  const grid = document.getElementById('healthGrid');
+  grid.innerHTML = '';
+  const today = todayISO();
+  for (let i = -3; i <= 3; i++) {
+    const iso = addDays(today, i);
+    const d = fromISO(iso);
+    const rec = state.health[iso] || { state: null, medMorning: false, medEvening: false };
+    const card = document.createElement('div');
+    card.className = 'day-card' + (i === 0 ? ' today' : '');
+    card.dataset.iso = iso;
+    card.innerHTML = `
+      <div class="dow">${DOW_RU[d.getDay()]}</div>
+      <div class="date">${formatRu(iso)}</div>
+      <div class="state-btns">
+        ${HEALTH_STATES.map(s => `
+          <div class="state-btn ${rec.state === s.id ? 'active' : ''}"
+               data-state="${s.id}"
+               onclick="window.setHealthState('${iso}', '${s.id}')">${s.label}</div>
+        `).join('')}
+      </div>
+      <div class="meds">
+        <div class="med-row">
+          <span>💊 Утро</span>
+          <div class="checkbox ${rec.medMorning ? 'checked' : ''}"
+               onclick="window.toggleMed('${iso}', 'medMorning')">${rec.medMorning ? '✓' : ''}</div>
+        </div>
+        <div class="med-row">
+          <span>💊 Вечер</span>
+          <div class="checkbox ${rec.medEvening ? 'checked' : ''}"
+               onclick="window.toggleMed('${iso}', 'medEvening')">${rec.medEvening ? '✓' : ''}</div>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    requestAnimationFrame(() => {
+      const todayCard = grid.querySelector('.day-card.today');
+      if (todayCard) todayCard.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
+    });
+  }
+}
+
+function setHealthState(iso, s) {
+  if (!state.health[iso]) state.health[iso] = { state: null, medMorning: false, medEvening: false };
+  state.health[iso].state = (state.health[iso].state === s) ? null : s;
+  saveState();
+  renderHealth();
+  drawHealthChart();
+}
+
+function toggleMed(iso, key) {
+  if (!state.health[iso]) state.health[iso] = { state: null, medMorning: false, medEvening: false };
+  state.health[iso][key] = !state.health[iso][key];
+  saveState();
+  renderHealth();
+}
+
+/* ============================================================
+   ГРАФИК
+   ============================================================ */
+let chartRange = 'month';
+
+document.querySelectorAll('#chartSeg button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#chartSeg button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    chartRange = btn.dataset.range;
+    drawHealthChart();
+  });
+});
+
+function getChartDays() {
+  if (chartRange === 'month') return 30;
+  if (chartRange === 'quarter') return 90;
+  return 365;
+}
+
+function drawHealthChart() {
+  const canvas = document.getElementById('healthChart');
+  if (!canvas) return;
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = wrap.clientWidth;
+  const isMobile = window.matchMedia('(max-width: 640px)').matches;
+  const cssHeight = isMobile ? 220 : 260;
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  canvas.style.width = cssWidth + 'px';
+  canvas.style.height = cssHeight + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const cs = getComputedStyle(document.documentElement);
+  const colBorder = cs.getPropertyValue('--border').trim();
+  const colMuted  = cs.getPropertyValue('--muted').trim();
+  const colOk     = cs.getPropertyValue('--ok').trim();
+  const colOkSoft = cs.getPropertyValue('--ok-soft').trim();
+  const colWarn   = cs.getPropertyValue('--warn').trim();
+  const colBad    = cs.getPropertyValue('--bad').trim();
+  const colBadSoft = cs.getPropertyValue('--bad-soft').trim();
+
+  const days = getChartDays();
+  const today = todayISO();
+  const start = addDays(today, -(days - 1));
+
+  const points = [];
+  for (let i = 0; i < days; i++) {
+    const iso = addDays(start, i);
+    const rec = state.health[iso];
+    let val = null;
+    if (rec && rec.state != null) {
+      // поддержка старых ключей up/down как ±1 (совместимость)
+      if (rec.state === 'up' || rec.state === 'down' || rec.state === 'ok' ||
+          rec.state === 'strongUp' || rec.state === 'strongDown') {
+        val = STATE_VALUE[rec.state];
+      }
+    }
+    points.push({ iso, value: val, state: rec?.state || null });
+  }
+
+  const padL = isMobile ? 34 : 46;
+  const padR = 12;
+  const padT = 20;
+  const padB = isMobile ? 26 : 32;
+  const plotW = cssWidth - padL - padR;
+  const plotH = cssHeight - padT - padB;
+
+  const xOf = i => padL + (points.length === 1 ? plotW / 2 : (i / (points.length - 1)) * plotW);
+  // ось Y: -2 ... +2 → сверху +2, снизу -2
+  const yOf = v => padT + plotH / 2 - (v / 2.4) * (plotH / 2);
+
+  ctx.strokeStyle = colBorder;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  [2, 1, 0, -1, -2].forEach(v => {
+    const y = yOf(v);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = colMuted;
+  ctx.font = isMobile ? '10px -apple-system, sans-serif' : '11px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('⬆', padL - 8, yOf(2));
+  ctx.fillText('↗', padL - 8, yOf(1));
+  ctx.fillText('●', padL - 8, yOf(0));
+  ctx.fillText('↘', padL - 8, yOf(-1));
+  ctx.fillText('⬇', padL - 8, yOf(-2));
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const labelStep = Math.max(1, Math.floor(days / (isMobile ? 5 : 8)));
+  for (let i = 0; i < points.length; i += labelStep) {
+    const d = fromISO(points[i].iso);
+    const label = days > 60
+      ? `${MONTH_SHORT[d.getMonth()]}`
+      : `${d.getDate()}.${String(d.getMonth()+1).padStart(2,'0')}`;
+    ctx.fillText(label, xOf(i), padT + plotH + 6);
+  }
+
+  const segments = [];
+  let current = [];
+  points.forEach((p, i) => {
+    if (p.value == null) {
+      if (current.length) { segments.push(current); current = []; }
+    } else {
+      current.push({ x: xOf(i), y: yOf(p.value), v: p.value, state: p.state, i });
+    }
+  });
+  if (current.length) segments.push(current);
+
+  segments.forEach(seg => {
+    if (seg.length === 1) {
+      drawPoint(ctx, seg[0].x, seg[0].y, seg[0].state, { colOk, colWarn, colBad, colOkSoft, colBadSoft }, isMobile);
+      return;
+    }
+    ctx.save();
+    ctx.lineWidth = isMobile ? 2 : 2.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(seg[0].x, seg[0].y);
+    for (let i = 0; i < seg.length - 1; i++) {
+      const p0 = seg[i - 1] || seg[i];
+      const p1 = seg[i];
+      const p2 = seg[i + 1];
+      const p3 = seg[i + 2] || p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+    const grad = ctx.createLinearGradient(0, yOf(2), 0, yOf(-2));
+    grad.addColorStop(0, colWarn);
+    grad.addColorStop(0.25, colOkSoft);
+    grad.addColorStop(0.5, colOk);
+    grad.addColorStop(0.75, colBadSoft);
+    grad.addColorStop(1, colBad);
+    ctx.strokeStyle = grad;
+    ctx.stroke();
+    ctx.restore();
+    seg.forEach(p => drawPoint(ctx, p.x, p.y, p.state, { colOk, colWarn, colBad, colOkSoft, colBadSoft }, isMobile));
+  });
+}
+
+function drawPoint(ctx, x, y, state, colors, isMobile) {
+  let c = colors.colOk;
+  if (state === 'strongUp') c = colors.colWarn;
+  else if (state === 'up') c = colors.colOkSoft;
+  else if (state === 'ok') c = colors.colOk;
+  else if (state === 'down') c = colors.colBadSoft;
+  else if (state === 'strongDown') c = colors.colBad;
+  ctx.fillStyle = c;
+  ctx.beginPath();
+  ctx.arc(x, y, isMobile ? 2.8 : 3.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--panel').trim();
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (document.getElementById('view-health').classList.contains('active')) drawHealthChart();
+  }, 150);
+});
+
+/* ============================================================
+   ТОСТЫ
+   ============================================================ */
+function toast(text, kind) {
+  const wrap = document.getElementById('toastWrap');
+  if (!wrap) return;
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = text;
+  wrap.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('hide');
+    setTimeout(() => el.remove(), 300);
+  }, 3200);
+}
+
+/* ============================================================
+   ПОМОЩНИК (чат)
+   ============================================================ */
+function chatTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+/* Карточка предложенных изменений. Подписи сохранены в самом сообщении: после применения
+   объекта в состоянии уже нет, а объяснить, что произошло, всё равно надо. */
+function renderAiCard(msg) {
+  const actions = Array.isArray(msg.actions) ? msg.actions : [];
+  if (!actions.length) return '';
+  const lines = Array.isArray(msg.aiLines) && msg.aiLines.length
+    ? msg.aiLines
+    : actions.map(a => (a && a.type) || 'действие');
+  const status = msg.aiStatus === 'applied' ? 'applied'
+    : (msg.aiStatus === 'rejected' ? 'rejected' : 'pending');
+  const id = escapeHtml(msg.id);
+  const title = status === 'pending' ? 'Предлагаю изменения'
+    : (status === 'applied' ? 'Изменения применены' : 'Изменения отклонены');
+  let body = '<div class="msg-actions-title">' + title + '</div><ul>' +
+    lines.map(line => '<li>' + escapeHtml(line) + '</li>').join('') + '</ul>';
+  if (status === 'pending') {
+    body += '<div class="msg-actions-btns">' +
+      '<button onclick="window.applyAiMessage(\'' + id + '\')">Применить</button>' +
+      '<button class="ghost" onclick="window.rejectAiMessage(\'' + id + '\')">Не надо</button>' +
+      '</div>';
+  } else if (status === 'applied' && aiUndo && aiUndo.messageId === msg.id) {
+    body += '<div class="msg-actions-btns">' +
+      '<button class="ghost" onclick="window.undoAiMessage(\'' + id + '\')">Отменить</button>' +
+      '</div>';
+  }
+  return '<div class="msg-actions">' + body + '</div>';
+}
+
+function renderChat() {
+  const log = document.getElementById('chatLog');
+  if (!log) return;
+  const msgs = Array.isArray(state.messages) ? state.messages : [];
+  if (!msgs.length) {
+    log.innerHTML = '<div class="empty">' +
+      (currentUser
+        ? 'Пока пусто. Напишите сообщение — оно сохранится в облаке.'
+        : 'Войдите через Google (кнопка в шапке), чтобы сообщения сохранялись.') +
+      '</div>';
+    return;
+  }
+  log.innerHTML = msgs.map(msg => {
+    const role = msg.role === 'user' ? 'user' : 'assistant';
+    const text = escapeHtml(msg.text || '').replace(/\n/g, '<br>');
+    return '<div class="msg msg-' + role + '">' +
+      '<div class="msg-bubble">' + text + '</div>' +
+      (role === 'assistant' ? renderAiCard(msg) : '') +
+      (role === 'assistant' && msg.speech
+        ? '<button type="button" class="msg-speak" title="Озвучить" onclick="window.speakMessage(\'' +
+          escapeHtml(msg.id) + '\')">🔊</button>'
+        : '') +
+      '<div class="msg-time">' + escapeHtml(chatTime(msg.at)) + '</div>' +
+      '</div>';
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+function addMessage(role, text, extra) {
+  if (!Array.isArray(state.messages)) state.messages = [];
+  const msg = {
+    id: uid(),
+    role: role,
+    text: text,
+    at: new Date().toISOString(),
+    actions: []
+  };
+  if (extra) {
+    if (Array.isArray(extra.actions)) msg.actions = extra.actions;
+    if (Array.isArray(extra.lines)) msg.aiLines = extra.lines;
+    if (extra.status) msg.aiStatus = extra.status;
+    // Текст для озвучки приходит от модели отдельным полем «speak»
+    if (extra.speech) msg.speech = String(extra.speech);
+  }
+  state.messages.push(msg);
+  saveState();
+  renderChat();
+  return msg.id;
+}
+
+/* ---------- Запрос к модели и подтверждение действий ---------- */
+let aiBusy = false;
+let aiUndo = null;        // { messageId, before } — отмена последнего применения
+let aiLastError = null;   // { code, at } — попадает в диагностику
+
+/* Голос живёт рядом с помощником: настройки только этого устройства (localStorage),
+   контроллер записи и последняя ошибка для диагностики. */
+let voiceSettings = voice.loadSettings(localStorage);
+let voiceRec = null;        // контроллер идущей записи, пока микрофон слушает
+let voiceBase = '';         // текст, который был в поле до начала диктовки
+let voiceLastError = null;
+
+function aiTyping() {
+  const log = document.getElementById('chatLog');
+  if (!log) return null;
+  const el = document.createElement('div');
+  el.className = 'msg msg-assistant msg-typing';
+  el.innerHTML = '<div class="msg-bubble">…</div>';
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+function aiMessageById(id) {
+  const msgs = Array.isArray(state.messages) ? state.messages : [];
+  return msgs.find(m => m && m.id === id) || null;
+}
+
+/* Без ключа сеть не трогаем: пользователю нужен маршрут «где взять ключ», а не ошибка. */
+async function askAssistant(phrase) {
+  if (aiBusy) {
+    toast('Помощник ещё отвечает на прошлое сообщение', 'bad');
+    return;
+  }
+  const key = ai.getKey(localStorage);
+  if (!key) {
+    addMessage('assistant', 'Нужен ключ DeepSeek API: откройте 💾 (кнопка в шапке) → ' +
+      'вставьте ключ в поле «Ключ DeepSeek» → «Сохранить ключ». Он останется только на этом устройстве.');
+    return;
+  }
+  aiBusy = true;
+  const typing = aiTyping();
+  try {
+    const messages = ai.buildMessages(phrase, ai.buildContext(state, new Date()));
+    const result = await ai.callModel({ key: key, messages: messages });
+    if (!result.ok) {
+      aiLastError = { code: result.code, at: new Date().toISOString() };
+      addMessage('assistant', result.message);
+      return;
+    }
+    const parsed = ai.parseReply(result.content);
+    if (!parsed.ok) {
+      aiLastError = { code: parsed.code, at: new Date().toISOString() };
+      addMessage('assistant', 'Не смог разобрать ответ модели. Попробуйте переформулировать запрос.');
+      return;
+    }
+    aiLastError = null;
+    const extra = {};
+    if (parsed.actions.length) {
+      extra.actions = parsed.actions;
+      extra.lines = ai.describeActions(parsed.actions, state);
+      extra.status = 'pending';
+    }
+    if (parsed.speak) extra.speech = parsed.speak;
+    addMessage('assistant', parsed.reply, Object.keys(extra).length ? extra : null);
+    // Озвучка — необязательная надстройка: без голоса ответ всё равно уже в чате
+    if (voiceSettings.speakReplies) voice.speak(parsed.speak || parsed.reply, voiceSettings);
+    // Молча терять предложения нельзя: пользователь должен знать, что часть отброшена
+    if (parsed.dropped) toast('Часть предложений модель составила неверно — они пропущены', 'bad');
+  } catch (e) {
+    console.error('Помощник:', e);
+    aiLastError = { code: 'exception', at: new Date().toISOString() };
+    addMessage('assistant', 'Сбой при обращении к модели: ' + ((e && e.message) || 'неизвестно'));
+  } finally {
+    if (typing && typing.parentNode) typing.parentNode.removeChild(typing);
+    aiBusy = false;
+    renderDiag();
+  }
+}
+
+window.applyAiMessage = function (id) {
+  const msg = aiMessageById(id);
+  if (!msg || !Array.isArray(msg.actions) || !msg.actions.length) return;
+  if (msg.aiStatus === 'applied') return;
+  const before = state;
+  const result = ai.applyActions(state, msg.actions, new Date());
+  if (!result.applied.length) {
+    toast('Нечего применять: объекты уже изменились или удалены', 'bad');
+    return;
+  }
+  state = result.state;
+  state.messages = (state.messages || []).map(m =>
+    m && m.id === id ? Object.assign({}, m, { aiStatus: 'applied' }) : m);
+  aiUndo = { messageId: id, before: before };
+  saveState();
+  renderAll();
+  const tail = result.skipped.length ? ', пропущено: ' + result.skipped.length : '';
+  toast('Применено изменений: ' + result.applied.length + tail, result.skipped.length ? 'bad' : 'ok');
+};
+
+window.rejectAiMessage = function (id) {
+  let found = false;
+  state.messages = (state.messages || []).map(m => {
+    if (!m || m.id !== id) return m;
+    found = true;
+    return Object.assign({}, m, { aiStatus: 'rejected' });
+  });
+  if (!found) return;
+  saveState();
+  renderChat();
+};
+
+/* Отмена возвращает состояние, которое было до применения: applyActions не меняет
+   исходный объект, поэтому снимок честный. Доступна только в текущей сессии. */
+window.undoAiMessage = function (id) {
+  if (!aiUndo || aiUndo.messageId !== id) {
+    toast('Отмена доступна только сразу после применения', 'bad');
+    return;
+  }
+  const undo = aiUndo;
+  aiUndo = null;
+  const rev = Math.max(Number(undo.before.rev) || 0, Number(state.rev) || 0);
+  state = undo.before;
+  state.rev = rev;
+  state.messages = (state.messages || []).map(m =>
+    m && m.id === id ? Object.assign({}, m, { aiStatus: 'rejected' }) : m);
+  saveState();
+  renderAll();
+  toast('Изменения отменены', 'ok');
+};
+
+function resizeChatInput() {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+}
+
+function initChat() {
+  const form = document.getElementById('chatForm');
+  const input = document.getElementById('chatInput');
+  if (!form || !input) return;
+
+  const resize = resizeChatInput;
+
+  input.addEventListener('input', resize);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    if (!currentUser) {
+      toast('Сначала войдите через Google — иначе сообщение не сохранится', 'bad');
+      return;
+    }
+    addMessage('user', text);
+    input.value = '';
+    resize();
+    input.focus();
+    askAssistant(text);
+  });
+}
+
+/* ============================================================
+   ГОЛОС: ДИКТОВКА И ОЗВУЧКА
+   ============================================================ */
+/* Настройки голоса, как и ключ DeepSeek, живут только на этом устройстве:
+   микрофон и голоса зависят от браузера и операционной системы, а не от аккаунта. */
+function updateVoiceUi() {
+  const mic = document.getElementById('micBtn');
+  if (mic) {
+    const listening = !!voiceRec;
+    mic.classList.toggle('listening', listening);
+    mic.textContent = listening ? '⏹' : '🎤';
+    mic.title = listening ? 'Остановить диктовку' : 'Сказать голосом';
+  }
+  const toggle = document.getElementById('voiceToggle');
+  if (toggle) {
+    toggle.textContent = voiceSettings.speakReplies ? '🔊 Озвучка включена' : '🔊 Озвучка выключена';
+    toggle.setAttribute('aria-pressed', voiceSettings.speakReplies ? 'true' : 'false');
+    toggle.title = voiceSettings.speakReplies
+      ? 'Ответы помощника читаются вслух — нажмите, чтобы выключить'
+      : 'Читать ответы помощника вслух';
+  }
+}
+
+/* Диктовка: распознанный текст дописывается в поле, но НЕ отправляется сам.
+   Ошибка распознавания не должна создавать запись «не то, что сказали». */
+window.toggleDictation = function () {
+  if (voiceRec) {
+    voiceRec.stop();  // onend снимет значок и обнулит voiceRec
+    return;
+  }
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+  if (!voice.isSecure(window)) {
+    toast('Диктовка работает только по https или на localhost', 'bad');
+    return;
+  }
+  voiceBase = input.value;
+  voiceLastError = null;
+  const controller = voice.recognize(window, {
+    onResult: result => {
+      const field = document.getElementById('chatInput');
+      if (!field) return;
+      field.value = voice.composeText(voiceBase, result.final, result.interim);
+      resizeChatInput();
+    },
+    onError: (code, message) => {
+      voiceLastError = { code: code, at: new Date().toISOString() };
+      toast(message, 'bad');
+    },
+    onUnsupported: () => {
+      voiceLastError = { code: 'unsupported', at: new Date().toISOString() };
+      toast('Этот браузер не умеет распознавать речь', 'bad');
+    },
+    onEnd: () => {
+      voiceRec = null;
+      updateVoiceUi();
+      const field = document.getElementById('chatInput');
+      if (field) field.focus();
+      renderDiag();
+    }
+  });
+  voiceRec = controller;
+  updateVoiceUi();
+  if (controller) toast('Слушаю… нажмите ⏹, когда закончите', 'ok');
+  renderDiag();
+};
+
+/* Озвучка ответов: по умолчанию выключена, чтобы приложение не заговорило само.
+   При включении сразу говорим пробную фразу — это и проверка голоса, и жест,
+   которого требует iOS для первого speak. */
+window.toggleSpeakReplies = function () {
+  voiceSettings = Object.assign({}, voiceSettings, { speakReplies: !voiceSettings.speakReplies });
+  if (!voice.saveSettings(voiceSettings, localStorage)) {
+    toast('Не удалось сохранить настройку: браузер не дал доступ к localStorage', 'bad');
+  }
+  updateVoiceUi();
+  renderDiag();
+  if (!voiceSettings.speakReplies) {
+    voice.stopSpeaking(window);
+    toast('Озвучка выключена', 'ok');
+    return;
+  }
+  if (!voice.canSpeak(window)) {
+    toast('Этот браузер не умеет озвучивать текст', 'bad');
+    return;
+  }
+  if (!voice.speak('Озвучка включена', voiceSettings)) {
+    toast('Не удалось включить звук — проверьте голоса в системе', 'bad');
+    return;
+  }
+  toast('Озвучка включена: ответы будут читаться вслух', 'ok');
+};
+
+/* Повторное прослушивание ответа из истории чата. */
+window.speakMessage = function (id) {
+  const msg = aiMessageById(id);
+  if (!msg || !msg.speech) return;
+  if (!voice.speak(msg.speech, voiceSettings)) {
+    toast('Этот браузер не умеет озвучивать текст', 'bad');
+  }
+};
+
+function initVoice() {
+  const mic = document.getElementById('micBtn');
+  if (mic) {
+    // Без поддержки кнопка только мешает: прячем, а не показываем мёртвой
+    if (voice.recognitionAvailable(window)) mic.addEventListener('click', window.toggleDictation);
+    else mic.style.display = 'none';
+  }
+  const toggle = document.getElementById('voiceToggle');
+  if (toggle && !voice.canSpeak(window)) toggle.style.display = 'none';
+  updateVoiceUi();
+}
+
+/* ============================================================
+   ДАННЫЕ: ЭКСПОРТ / ИМПОРТ
+   ============================================================ */
+function backupName() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return 'planer-backup-' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '.json';
+}
+
+function downloadJSON(data, name) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function snapshotPayload(reason) {
+  return {
+    app: 'planer',
+    schema: 3,
+    reason: reason || '',
+    exportedAt: new Date().toISOString(),
+    project: firebaseConfig.projectId,
+    docPath: currentUser ? 'users/{uid}/' + (SANDBOX ? 'sandbox' : 'state') + '/main' : 'local',
+    rev: state.rev || 0,
+    state: state
+  };
+}
+
+window.openDataModal = function () {
+  const st = document.getElementById('dataStatus');
+  if (st) {
+    st.textContent = currentUser
+      ? 'Вы вошли как ' + currentUser.email + '. Сейчас на устройстве: ' + summaryText(state) + '.'
+      : 'Вход не выполнен — данные только на этом устройстве.';
+  }
+  renderDiag();
+  document.getElementById('dataModal').classList.add('active');
+};
+
+window.closeDataModal = function () {
+  document.getElementById('dataModal').classList.remove('active');
+};
+
+/* Проверка «на живую»: читаем документ с сервера, мимо кэша.
+   Это единственный способ отличить «нет правил» от «нет документа» без консоли. */
+window.checkCloudNow = async function () {
+  const st = document.getElementById('dataStatus');
+  if (!currentUser || !docRef) {
+    if (st) st.textContent = 'Сначала войдите: без входа проверять нечего — данные лежат только на устройстве.';
+    renderDiag();
+    return;
+  }
+  if (st) st.textContent = 'Проверяю документ в облаке...';
+  try {
+    const snap = await getDocFromServer(docRef);
+    if (snap.exists()) {
+      const data = snap.data() || {};
+      if (st) st.textContent = 'Связь есть. Документ найден: rev ' + (data.rev || 1) +
+        ', в облаке ' + summaryText(data) + '.';
+      noteSyncOk(data.rev || 1, data.updatedAt);
+    } else {
+      if (st) st.textContent = 'Связь есть, но документа в облаке нет. Он появится после первой ' +
+        'правки или после «Записать мои в облако».';
+      diagLastError = null;
+      diagNotifiedCode = '';
+      renderDiag();
+    }
+  } catch (e) {
+    console.error('Проверка связи:', e);
+    const info = fsErrorInfo(e);
+    if (st) st.textContent = 'Проверка не прошла: ' + info.short +
+      (info.hint ? '. ' + info.hint : '');
+    diagLastError = { code: info.code, text: info.short, hint: info.hint, at: new Date().toISOString() };
+    renderDiag();
+  }
+};
+
+/* Текст диагностики одной строкой — чтобы с телефона можно было прислать его целиком */
+function diagText() {
+  return [
+    'planer diag',
+    'time: ' + new Date().toISOString(),
+    'project: ' + firebaseConfig.projectId,
+    'sandbox: ' + (SANDBOX ? 'yes' : 'no'),
+    'account: ' + (currentUser ? currentUser.email : 'signed out'),
+    'uid: ' + (currentUser ? currentUser.uid : '-'),
+    'doc: ' + (currentUser ? 'users/' + currentUser.uid + '/' + (SANDBOX ? 'sandbox' : 'state') + '/main' : 'local only'),
+    'state: ' + diagStateText(),
+    'last write: ' + (diagLastWriteAt || '-') + ' rev ' + diagLastRev,
+    'last error: ' + (diagLastError ? diagLastError.code + ' / ' + diagLastError.text : '-'),
+    'merge: by id, hidden deleted: ' + tombstoneCount(state.tombstones),
+    'assistant: ' + (ai.getKey(localStorage) ? 'key set' : 'no key') +
+      ', last error: ' + (aiLastError ? aiLastError.code : '-'),
+    'voice: ' + voice.voiceSummary(window, voiceSettings),
+    'data: ' + summaryText(state)
+  ].join('\n');
+}
+
+window.copyDiag = async function () {
+  const text = diagText();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', 'readonly');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    toast('Диагностика скопирована', 'ok');
+  } catch (e) {
+    console.error('Копирование диагностики:', e);
+    console.log(text);
+    toast('Скопировать не удалось — текст в консоли', 'bad');
+  }
+};
+
+window.exportJSON = function () {
+  downloadJSON(snapshotPayload('manual'), backupName());
+  toast('Копия сохранена в файл', 'ok');
+};
+
+window.pickImportJSON = function () {
+  const input = document.getElementById('importFileInput');
+  if (!input) return;
+  input.value = '';
+  input.click();
+};
+
+function applyImported(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    toast('Файл не похож на копию планера', 'bad');
+    return;
+  }
+  const payload = data.state && typeof data.state === 'object' ? data.state : data;
+  const known = ['tasks', 'kanbanCards', 'events', 'projects', 'works', 'programs', 'health', 'messages'];
+  if (!known.some(k => payload[k] !== undefined)) {
+    toast('В файле нет данных планера', 'bad');
+    return;
+  }
+  // страховка: перед заменой скачиваем текущее состояние
+  downloadJSON(snapshotPayload('before-import'), backupName());
+  adoptState(payload, { replace: true });
+  saveState();
+  renderAll();
+  window.closeDataModal();
+  toast('Импортировано: ' + summaryText(state), 'ok');
+}
+
+function initData() {
+  const input = document.getElementById('importFileInput');
+  if (!input) return;
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        applyImported(JSON.parse(String(reader.result)));
+      } catch (e) {
+        console.error(e);
+        toast('Не удалось прочитать JSON', 'bad');
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+/* ============================================================
+   ПЕРЕЕЗД ИЗ СТАРОГО ПРОЕКТА (ТОЛЬКО ЧТЕНИЕ)
+   ============================================================ */
+window.importFromLegacy = async function () {
+  const st = document.getElementById('dataStatus');
+  const applyBtn = document.getElementById('legacyApplyBtn');
+  let legacyApp = null;
+  try {
+    if (st) st.textContent = 'Читаю старый проект mylifeplanner-98a49 (только чтение)...';
+    // Отдельный экземпляр Firebase: в старую базу уходит ТОЛЬКО getDoc
+    legacyApp = initializeApp(LEGACY_CONFIG, 'legacy-' + Date.now());
+    const legacyDb = getFirestore(legacyApp);
+    const snap = await getDoc(doc(legacyDb, 'userdata', 'yuri-main'));
+    if (!snap.exists()) {
+      if (st) st.textContent = 'В старом проекте документ userdata/yuri-main не найден.';
+      toast('В старом проекте данных нет', 'bad');
+      return;
+    }
+    const legacy = snap.data() || {};
+    window._legacyData = legacy;
+    if (st) st.textContent = 'Найдено в старом проекте: ' + summaryText(legacy) +
+      '. Нажмите кнопку ниже, чтобы перенести.';
+    if (applyBtn) applyBtn.style.display = '';
+  } catch (e) {
+    console.error('Импорт из старого проекта:', e);
+    const code = e && e.code ? String(e.code) : '';
+    const legacyText =
+      code === 'permission-denied'
+        ? 'Старый проект закрыт правилами для чтения. Чтение идёт без входа, поэтому нужен JSON-импорт: кнопка «Загрузить JSON-копию» выше.'
+        : code === 'unavailable'
+          ? 'Нет сети — старый проект сейчас недоступен. Повторите позже или используйте JSON-копию.'
+          : code === 'not-found'
+            ? 'В старом проекте нет базы Firestore или документа — читать нечего. Используйте JSON-копию.'
+            : code === 'invalid-api-key'
+              ? 'Ключ старого проекта больше не действует. Используйте JSON-копию.'
+              : 'Не удалось прочитать старый проект: ' + (code || 'неизвестная ошибка') + '. Используйте JSON-копию.';
+    if (st) st.textContent = legacyText;
+    diagLastError = {
+      code: code || 'legacy',
+      text: 'Старый проект: чтение не удалось',
+      hint: legacyText,
+      at: new Date().toISOString()
+    };
+    renderDiag();
+    toast('Чтение старого проекта не удалось', 'bad');
+  } finally {
+    if (legacyApp) {
+      try { await deleteApp(legacyApp); } catch (e) { console.warn(e); }
+    }
+  }
+};
+
+window.applyLegacyImport = function () {
+  const legacy = window._legacyData;
+  if (!legacy) return;
+  downloadJSON(snapshotPayload('before-legacy-import'), backupName());
+  adoptState(legacy, { replace: true });
+  saveState();
+  renderAll();
+  window._legacyData = null;
+  const applyBtn = document.getElementById('legacyApplyBtn');
+  if (applyBtn) applyBtn.style.display = 'none';
+  const st = document.getElementById('dataStatus');
+  if (st) st.textContent = 'Перенесено из старого проекта: ' + summaryText(state) + '.';
+  toast('Данные старого проекта перенесены', 'ok');
+};
+
+/* ============================================================
+   PWA: УСТАНОВКА
+   ============================================================ */
+let deferredPrompt = null;
+
+function initPWA() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
+  }
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const btn = document.getElementById('btnInstall');
+    if (btn) btn.style.display = '';
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    const btn = document.getElementById('btnInstall');
+    if (btn) btn.style.display = 'none';
+    toast('Приложение установлено', 'ok');
+  });
+}
+
+window.installApp = async function () {
+  const btn = document.getElementById('btnInstall');
+  if (!deferredPrompt) {
+    toast('Установка недоступна: добавьте страницу на главный экран вручную', 'bad');
+    return;
+  }
+  deferredPrompt.prompt();
+  try { await deferredPrompt.userChoice; } catch (e) { console.warn(e); }
+  deferredPrompt = null;
+  if (btn) btn.style.display = 'none';
+};
+
+/* ============================================================
+   УТИЛИТЫ
+   ============================================================ */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderAll() {
+  renderKanban();
+  renderCalendar();
+  renderUpcoming();
+  renderDeals();
+  renderHobbies();
+  renderChat();
+  renderHealth();
+  drawHealthChart();
+}
+
+/* ============================================================
+   ЭКСПОРТ В ГЛОБАЛЬНУЮ ОБЛАСТЬ
+   ============================================================ */
+window.moveCardBy = moveCardBy;
+window.deleteCard = deleteCard;
+window.addKanbanCard = addKanbanCard;
+window.addHobbyTask = addHobbyTask;
+window.toggleTaskDone = toggleTaskDone;
+window.deleteTask = deleteTask;
+window.addWork = addWork;
+window.deleteWork = deleteWork;
+window.addProgram = addProgram;
+window.toggleProgramDone = toggleProgramDone;
+window.deleteProgram = deleteProgram;
+window.openLinkModal = openLinkModal;
+window.closeLinkModal = closeLinkModal;
+window.saveLinkModal = saveLinkModal;
+window.setHealthState = setHealthState;
+window.toggleMed = toggleMed;
+window.calShift = calShift;
+window.calToday = calToday;
+window.openEventModal = openEventModal;
+window.closeEventModal = closeEventModal;
+window.saveEventModal = saveEventModal;
+window.deleteEvent = deleteEvent;
+window.addProject = addProject;
+window.addHobbyProject = addHobbyProject;
+window.deleteProject = deleteProject;
+window.setProjectHobby = setProjectHobby;
+window.moveProject = moveProject;
+window.moveProjectBy = moveProjectBy;
+window.openProject = openProject;
+window.closeProject = closeProject;
+window.setProjectStatus = setProjectStatus;
+window.addSubtaskToColumn = addSubtaskToColumn;
+window.moveSubtaskToColumn = moveSubtaskToColumn;
+window.closeSubtaskModal = closeSubtaskModal;
+window.saveSubtaskModal = saveSubtaskModal;
+window.toggleSubtask = toggleSubtask;
+window.deleteSubtask = deleteSubtask;
+window.toggleSubsub = toggleSubsub;
+window.addSubsub = addSubsub;
+window.toggleSubsubDone = toggleSubsubDone;
+window.deleteSubsub = deleteSubsub;
+
+/* ============================================================
+   СТАРТ
+   ============================================================ */
+applyTheme(theme);
+initChat();
+initVoice();
+initData();
+initEventForm();
+initPWA();
+updateAuthUI();
+setSyncStatus('syncing', 'Проверяю вход...');
+renderAll();
+</script>
+
+</body>
+</html>
