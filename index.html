@@ -1629,6 +1629,28 @@
       …и через 3 секунды тишины, без слова «отправить»
     </label>
 
+    <div class="data-note" style="margin-top:14px;">
+      Напоминания приходят, даже когда приложение закрыто. iPhone разрешает их только
+      приложению с домашнего экрана (iOS 16.4+): в обычной вкладке Safari Web Push нет.
+      Подписка своя у каждого устройства, поэтому на телефоне нужно включить отдельно.
+    </div>
+    <div class="data-note" id="pushStatus" style="margin-bottom:8px;">Проверяю уведомления...</div>
+    <div class="data-row">
+      <button onclick="window.enableNotifications()">🔔 Включить</button>
+      <button class="ghost" onclick="window.testNotification()">Проверить</button>
+      <button class="ghost" onclick="window.disableNotifications()">Отключить</button>
+    </div>
+    <div class="data-row" style="margin-top:8px;">
+      <select id="pushLead" style="flex:1;min-width:150px;" onchange="window.setPushLead(this.value)">
+        <option value="5">Событие — за 5 минут</option>
+        <option value="15">Событие — за 15 минут</option>
+        <option value="30">Событие — за 30 минут</option>
+        <option value="60">Событие — за час</option>
+        <option value="120">Событие — за 2 часа</option>
+      </select>
+    </div>
+    <div class="data-note" id="pushHint" style="margin-top:8px;"></div>
+
     <div class="data-btns">
       <button class="ghost mini" onclick="window.checkCloudNow()">Проверить связь</button>
       <button class="ghost mini" onclick="window.copyDiag()">Скопировать диагностику</button>
@@ -1714,7 +1736,7 @@
    ============================================================ */
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
 import {
-  initializeFirestore, getFirestore, doc, getDoc, getDocFromServer, setDoc, onSnapshot,
+  initializeFirestore, getFirestore, doc, getDoc, getDocFromServer, setDoc, deleteDoc, onSnapshot,
   persistentLocalCache, persistentMultipleTabManager
 } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
 import {
@@ -1727,6 +1749,8 @@ import { buildWriteState, mergeState, sameSyncSignature, tombstoneCount } from '
 import * as ai from './ai.js';
 /* Распознавание речи и озвучка ответов (см. voice.js) */
 import * as voice from './voice.js';
+/* Напоминания: подписка устройства и план для внешнего отправителя (см. push.js) */
+import * as push from './push.js';
 
 /* Новый проект — рабочая база */
 const firebaseConfig = {
@@ -1859,6 +1883,8 @@ function migrateProjects(projects) {
 
 function saveState() {
   saveLocal();
+  /* План напоминаний меняется вместе с данными: события и сроки живут в state */
+  schedulePushPlan();
   if (!currentUser) {
     // до входа писать некуда: помечаем, что на устройстве есть несинхронизированные правки
     replaceNext = false;
@@ -2144,6 +2170,7 @@ onAuthStateChanged(auth, async user => {
     hideLoading();
     setSyncStatus('offline', 'Вход не выполнен');
     renderAll();
+    updatePushUi();
     return;
   }
 
@@ -2159,6 +2186,8 @@ onAuthStateChanged(auth, async user => {
   docRef = doc(db, ...statePath(user.uid));
   setSyncStatus('syncing', 'Подключаюсь...');
   attachCloud();
+  /* Подписка уже могла быть создана раньше: после входа её надо записать в облако */
+  initPush();
 });
 
 /* Возврат после redirect-входа (Safari/iOS: popup там блокируется).
@@ -2431,6 +2460,16 @@ window.switchView = switchView;
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => switchView(tab.dataset.view));
 });
+
+/* Переход по ссылке из уведомления: service worker открывает ./#calendar, ./#hobbies
+   или ./#kanban, а вкладку по хешу переключаем здесь — сам браузер этого не делает. */
+function applyViewFromHash() {
+  const name = String(location.hash || '').replace(/^#/, '');
+  if (!name) return false;
+  return switchView(name);
+}
+window.applyViewFromHash = applyViewFromHash;
+window.addEventListener('hashchange', applyViewFromHash);
 
 /* Кнопка «Помощник» рядом с плашкой: сразу открывает чат и ставит курсор
    в поле ввода. На тач-устройствах фокус не ставим — иначе выезжает
@@ -4212,13 +4251,38 @@ let aiLastError = null;   // { code, at } — попадает в диагнос
 /* Голос живёт рядом с помощником: настройки только этого устройства (localStorage),
    контроллер записи и последняя ошибка для диагностики. */
 let voiceSettings = voice.loadSettings(localStorage);
+
+/* Сколько ждать тишину перед отправкой. Значение живёт в voice.js, но
+   index.html и voice.js кэшируются порознь: после обновления страницы у
+   пользователя может остаться старый voice.js без константы. Тогда в подсказке
+   появлялось «через NaN секунды», а setTimeout получал NaN и молча срабатывал
+   сразу. Берём значение с проверкой и всегда имеем запасные 3 секунды. */
+const VOICE_SILENCE_FALLBACK_MS = 3000;
+/* Аргумент — только для тестов: он позволяет проверить запасное значение,
+   не подменяя сам модуль. В обычной работе параметра нет. */
+function voiceSilenceMs(raw) {
+  const asked = Number(raw === undefined ? voice.VOICE_SILENCE_MS : raw);
+  return Number.isFinite(asked) && asked > 0 ? asked : VOICE_SILENCE_FALLBACK_MS;
+}
+window.voiceSilenceMs = voiceSilenceMs;
+
+/* Можно ли отправлять по тишине. voice.silenceSendReady есть только в новом
+   voice.js; если файл в кэше старый, проверяем условие сами — иначе TypeError
+   рвал обработку распознанного текста и фраза вообще не попадала в поле. */
+function silenceSendAllowed(value) {
+  if (typeof voice.silenceSendReady === 'function') {
+    return voice.silenceSendReady(voiceSettings, value);
+  }
+  if (!voiceSettings || voiceSettings.autoSend === false || voiceSettings.silenceSend === false) return false;
+  return String(value == null ? '' : value).trim() !== '';
+}
 let voiceRec = null;        // контроллер идущей записи, пока микрофон слушает
 let voiceBase = '';         // текст, который был в поле до начала диктовки
 let voiceDraft = '';        // распознанный в этой сессии текст (без voiceBase)
 let voiceLastError = null;
 /* Голосовая отправка: тишина → сообщение уходит само.
    command — сказали «отправить», ждём sendDelay мс;
-   silence — просто замолчали, ждём VOICE_SILENCE_MS (3 с).
+   silence — просто замолчали, ждём voiceSilenceMs() (3 с).
    Пока armed, плашка показывает обратный отсчёт, кнопка «Отменить» снимает его. */
 let voiceArmed = false;
 let voiceArmKind = '';        // 'command' | 'silence' — чей сейчас отсчёт
@@ -4604,10 +4668,12 @@ function voiceListeningHint() {
   if (voiceSettings.autoSend === false) return 'Слушаю… нажмите ⏹, когда закончите';
   if (voiceSettings.silenceSend !== false) {
     return 'Слушаю… сообщение уйдёт само, если замолчать на ' +
-      Math.round(voice.VOICE_SILENCE_MS / 1000) + ' секунды';
+      Math.round(voiceSilenceMs() / 1000) + ' секунды';
   }
   return 'Слушаю… скажите «отправить», и сообщение уйдёт после паузы';
 }
+/* Подсказку видно и снаружи: по её тексту тесты ловят «NaN секунды». */
+window.voiceListeningHint = voiceListeningHint;
 
 function stopVoice() {
   voiceAutoListen = false;
@@ -4730,8 +4796,8 @@ function handleVoiceResult(result) {
   }
   /* Замолчали, а текст уже есть — ждём три секунды и отправляем сами.
      Любое новое слово перезапустит отсчёт через эту же ветку. */
-  if (voice.silenceSendReady(voiceSettings, field.value)) {
-    armVoiceSend(voice.VOICE_SILENCE_MS, 'silence');
+  if (silenceSendAllowed(field.value)) {
+    armVoiceSend(voiceSilenceMs(), 'silence');
     return;
   }
   showVoiceHint(voiceListeningHint(), true, false);
@@ -4739,7 +4805,7 @@ function handleVoiceResult(result) {
 
 /* Сколько ждать именно для текущего вида отсчёта. */
 function voiceArmDelay() {
-  return voiceArmKind === 'silence' ? voice.VOICE_SILENCE_MS : voiceSettings.sendDelay;
+  return voiceArmKind === 'silence' ? voiceSilenceMs() : voiceSettings.sendDelay;
 }
 
 function chatViewActive() {
@@ -4808,7 +4874,7 @@ function clearVoiceSendTimer() {
   if (box) box.classList.remove('armed');
 }
 
-/* Отсчёт до отправки: «отправить» → sendDelay, тишина → VOICE_SILENCE_MS.
+/* Отсчёт до отправки: «отправить» → sendDelay, тишина → voiceSilenceMs().
    Любое новое слово перезапускает окно, «отмена»/«нет»/«стоп» — снимает его. */
 function armVoiceSend(delay, kind) {
   clearTimeout(voiceSendTimer);
@@ -4969,6 +5035,7 @@ window.openDataModal = function () {
   renderDiag();
   /* Список голосов мог измениться (скачали «Юрия») — обновляем при каждом открытии. */
   updateVoiceUi();
+  updatePushUi();
   document.getElementById('dataModal').classList.add('active');
 };
 
@@ -5175,6 +5242,247 @@ window.applyLegacyImport = function () {
 };
 
 /* ============================================================
+   НАПОМИНАНИЯ (WEB PUSH)
+   ============================================================ */
+/* Браузер не может разбудить себя сам: пока приложение закрыто, его таймеры
+   не работают. Поэтому устройство кладёт в облако план напоминаний
+   (users/{uid}/pushPlan/main), а рассылает его GitHub Actions по cron —
+   там же лежат секреты VAPID. Здесь только подписка и запись плана. */
+let pushSettings = push.loadSettings(localStorage);
+let pushSubscribed = false;
+let pushPlanTimer = null;
+
+/* Подписка устройства и план живут рядом с state, но отдельными документами:
+   у телефона и ноутбука они разные, а план перезаписывается при каждой правке. */
+function pushSubPath(deviceId) {
+  return ['users', currentUser.uid, SANDBOX ? 'sandboxPush' : 'push', deviceId];
+}
+
+function pushPlanPath() {
+  return ['users', currentUser.uid, SANDBOX ? 'sandboxPushPlan' : 'pushPlan', 'main'];
+}
+
+function pushPad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/* «20.10 11:30 Созвон» — так пользователь видит, что напоминание вообще есть */
+function pushNextText() {
+  const now = new Date();
+  const next = push.nextDue(push.buildPushPlan(state, now, pushSettings), now);
+  if (!next) return '';
+  const at = new Date(next.at);
+  return pushPad2(at.getDate()) + '.' + pushPad2(at.getMonth() + 1) + ' ' +
+    pushPad2(at.getHours()) + ':' + pushPad2(at.getMinutes()) + ' ' + next.title;
+}
+
+function pushPlatformText() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/.test(ua)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  if (/Macintosh/.test(ua)) return 'macos';
+  if (/Windows/.test(ua)) return 'windows';
+  return 'other';
+}
+
+function updatePushUi() {
+  const supported = push.pushSupported(window);
+  const configured = push.pushConfigured();
+  const permission = push.permissionState(window);
+  const status = document.getElementById('pushStatus');
+  const hint = document.getElementById('pushHint');
+  const lead = document.getElementById('pushLead');
+  if (lead && String(pushSettings.leadMinutes) !== lead.value) {
+    const option = Array.prototype.some.call(lead.options, o => o.value === String(pushSettings.leadMinutes));
+    lead.value = option ? String(pushSettings.leadMinutes) : String(push.PUSH_LEAD_MIN_DEFAULT);
+  }
+  if (status) {
+    status.textContent = push.statusLabel({
+      supported: supported,
+      configured: configured,
+      permission: permission,
+      subscribed: pushSubscribed,
+      enabled: pushSettings.enabled,
+      next: pushSubscribed && pushSettings.enabled ? pushNextText() : ''
+    });
+  }
+  if (!hint) return;
+  if (!supported) {
+    hint.textContent = 'На iPhone откройте приложение с домашнего экрана (iOS 16.4+). ' +
+      'В обычной вкладке Safari уведомлений нет — это ограничение системы, а не приложения.';
+  } else if (pushSubscribed && pushSettings.enabled) {
+    hint.textContent = 'Событие — за ' + pushSettings.leadMinutes + ' мин, задача — утром в день срока. ' +
+      'Доставку проверяет кнопка «Проверить»: уведомление должно появиться сразу.';
+  } else {
+    hint.textContent = 'Подписка своя у каждого устройства: включите напоминания на телефоне отдельно. ' +
+      'Нужен вход в аккаунт — план хранится в облаке.';
+  }
+}
+window.updatePushUi = updatePushUi;
+
+/* План пишется в облако, а не наоборот: отправитель ничего не меняет в данных. */
+async function pushWritePlan() {
+  if (!currentUser || !pushSettings.enabled) return false;
+  try {
+    const now = new Date();
+    const plan = push.buildPushPlan(state, now, pushSettings);
+    await setDoc(doc(db, ...pushPlanPath()), push.planDoc(plan, now, push.deviceTimeZone()), { merge: true });
+    return true;
+  } catch (e) {
+    console.warn('План напоминаний:', e);
+    return false;
+  }
+}
+
+/* Правки идут пачками (saveState зовут на каждый чекбокс), поэтому пишем с задержкой */
+function schedulePushPlan() {
+  if (!currentUser || !pushSettings.enabled) return;
+  clearTimeout(pushPlanTimer);
+  pushPlanTimer = setTimeout(() => { pushWritePlan(); }, 3000);
+}
+
+async function pushSaveSubscription(subscription) {
+  if (!currentUser || !subscription) return false;
+  const record = push.subscriptionRecord(subscription, {
+    ua: navigator.userAgent || '',
+    platform: pushPlatformText(),
+    timeZone: push.deviceTimeZone(),
+    leadMinutes: pushSettings.leadMinutes
+  });
+  if (!record.deviceId) return false;
+  await setDoc(doc(db, ...pushSubPath(record.deviceId)), record, { merge: true });
+  return true;
+}
+
+/* Разрешение спрашиваем только по нажатию: иначе браузер (а на iOS и система)
+   запомнит отказ, и второй попытки уже не будет. */
+window.enableNotifications = async function () {
+  const status = document.getElementById('pushStatus');
+  if (!push.pushSupported(window)) {
+    toast('Уведомления недоступны: нужно приложение с домашнего экрана (iOS 16.4+)', 'bad');
+    updatePushUi();
+    return;
+  }
+  if (!push.pushConfigured()) {
+    toast('Доставка не настроена: в push.js нет публичного ключа VAPID', 'bad');
+    updatePushUi();
+    return;
+  }
+  if (!currentUser) {
+    toast('Сначала войдите: подписка хранится в облаке', 'bad');
+    return;
+  }
+  if (status) status.textContent = 'Спрашиваю разрешение…';
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      toast(permission === 'denied'
+        ? 'Уведомления запрещены в настройках устройства'
+        : 'Разрешение не выдано', 'bad');
+      updatePushUi();
+      return;
+    }
+    const registration = await push.registerPush(window);
+    const subscription = await push.subscribePush(registration, push.VAPID_PUBLIC_KEY);
+    pushSettings = push.normalizeSettings(Object.assign({}, pushSettings, { enabled: true }));
+    push.saveSettings(pushSettings, localStorage);
+    pushSubscribed = !!subscription;
+    const saved = await pushSaveSubscription(subscription)
+      .catch(e => { console.warn('Подписка:', e); return false; });
+    await pushWritePlan();
+    updatePushUi();
+    toast(saved ? 'Напоминания включены' : 'Подписка есть, но в облако не записалась', saved ? 'ok' : 'bad');
+  } catch (e) {
+    console.error('Уведомления:', e);
+    toast('Не удалось включить уведомления: ' + ((e && e.message) || 'ошибка'), 'bad');
+    updatePushUi();
+  }
+};
+
+/* Проверка «здесь и сейчас»: показываем то же уведомление, что придёт из push.
+   На iPhone локальные уведомления из страницы не поддерживаются — там доставку
+   проверяем запуском workflow (см. handoff.md). */
+window.testNotification = async function () {
+  if (!pushSubscribed) {
+    toast('Сначала включите напоминания', 'bad');
+    return;
+  }
+  try {
+    const registration = await push.registerPush(window);
+    if (!registration || typeof registration.showNotification !== 'function') {
+      toast('Нет service worker: перезагрузите приложение', 'bad');
+      return;
+    }
+    const data = push.testPayload(new Date());
+    await registration.showNotification(data.title, {
+      body: data.body, tag: data.tag, icon: './icons/icon-192.png',
+      badge: './icons/icon-192.png', data: { url: data.url, key: data.key }
+    });
+    toast('Проверочное уведомление отправлено', 'ok');
+  } catch (e) {
+    console.warn('Проверка уведомлений:', e);
+    toast('Не удалось показать уведомление: ' + ((e && e.message) || 'ошибка'), 'bad');
+  }
+};
+
+/* Отключение снимает подписку совсем: иначе браузер продолжал бы принимать
+   уведомления, и «выключено» было бы враньём. */
+window.disableNotifications = async function () {
+  pushSettings = push.normalizeSettings(Object.assign({}, pushSettings, { enabled: false }));
+  push.saveSettings(pushSettings, localStorage);
+  let removed = false;
+  try {
+    const registration = await push.registerPush(window);
+    const subscription = await push.currentSubscription(registration);
+    if (subscription) {
+      const record = push.subscriptionRecord(subscription);
+      removed = await push.unsubscribePush(registration);
+      if (removed && currentUser && record.deviceId) {
+        await deleteDoc(doc(db, ...pushSubPath(record.deviceId)))
+          .catch(e => console.warn('Подписка:', e));
+      }
+    }
+  } catch (e) {
+    console.warn('Отключение уведомлений:', e);
+  }
+  pushSubscribed = false;
+  if (currentUser) {
+    setDoc(doc(db, ...pushPlanPath()), push.planDoc({ items: [] }, new Date(), push.deviceTimeZone()), { merge: true })
+      .catch(e => console.warn('План напоминаний:', e));
+  }
+  updatePushUi();
+  toast(removed ? 'Напоминания отключены на этом устройстве' : 'Напоминания выключены', 'ok');
+};
+
+window.setPushLead = function (value) {
+  pushSettings = push.normalizeSettings(Object.assign({}, pushSettings, { leadMinutes: value }));
+  if (!push.saveSettings(pushSettings, localStorage)) {
+    toast('Не удалось сохранить настройку: браузер не дал доступ к localStorage', 'bad');
+  }
+  updatePushUi();
+  pushWritePlan();
+};
+
+/* При старте и после входа: подписан ли этот браузер и не отозвано ли разрешение */
+async function initPush() {
+  updatePushUi();
+  if (!push.pushSupported(window)) return;
+  try {
+    const registration = await push.registerPush(window);
+    const subscription = await push.currentSubscription(registration);
+    pushSubscribed = !!subscription;
+    if (subscription && currentUser) {
+      await pushSaveSubscription(subscription).catch(e => console.warn('Подписка:', e));
+      if (pushSettings.enabled) pushWritePlan();
+    }
+    updatePushUi();
+  } catch (e) {
+    console.warn('Push:', e);
+  }
+}
+window.initPush = initPush;
+
+/* ============================================================
    PWA: УСТАНОВКА
    ============================================================ */
 let deferredPrompt = null;
@@ -5182,6 +5490,10 @@ let deferredPrompt = null;
 function initPWA() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
+    /* Браузер сменил push-подписку сам — просим страницу записать новую (см. sw.js) */
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data && event.data.type === 'push-resubscribe') initPush();
+    });
   }
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
@@ -5283,9 +5595,12 @@ initVoice();
 initData();
 initEventForm();
 initPWA();
+initPush();
 updateAuthUI();
 setSyncStatus('syncing', 'Проверяю вход...');
 renderAll();
+/* Пришли по ссылке из уведомления — открываем нужную вкладку */
+applyViewFromHash();
 </script>
 
 </body>

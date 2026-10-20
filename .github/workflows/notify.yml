@@ -1,0 +1,58 @@
+// Напоминания приложения «Личный ассистент»: раз в 5 минут читает план из
+// Firestore и рассылает Web Push. Приложение на GitHub Pages статическое, поэтому
+// роль сервера играет этот workflow. Секреты задаются в Settings → Secrets and
+// variables → Actions: FIREBASE_SERVICE_ACCOUNT, VAPID_PUBLIC_KEY,
+// VAPID_PRIVATE_KEY, VAPID_SUBJECT.
+name: Напоминания (Web Push)
+
+on:
+  schedule:
+    # GitHub не гарантирует точность: запуск может прийти с задержкой 5–15 минут.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'send — отправить по плану, dry-run — только показать, test — проверочное уведомление'
+        required: true
+        default: 'dry-run'
+        type: choice
+        options:
+          - dry-run
+          - test
+          - send
+
+permissions:
+  contents: read
+
+# Два запуска одновременно писать в pushState нельзя: получились бы дубли
+concurrency:
+  group: planer-push
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: _push
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Зависимости
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Рассылка
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_MODE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || 'send' }}
+        run: node send.mjs --mode="$PUSH_MODE"

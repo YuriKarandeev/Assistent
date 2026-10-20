@@ -1,0 +1,16 @@
+{
+  "name": "planer-push-sender",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Рассылка напоминаний (Web Push) по плану из Firestore — запускается GitHub Actions по cron.",
+  "scripts": {
+    "dry": "node send.mjs --mode=dry-run",
+    "test": "node send.mjs --mode=test",
+    "send": "node send.mjs --mode=send"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "web-push": "^3.6.7"
+  }
+}
