@@ -1622,7 +1622,11 @@
     </details>
     <label class="check" style="margin-top:8px;">
       <input type="checkbox" id="voiceAutoSend" onchange="window.setVoiceAutoSend(this.checked)">
-      Отправлять по слову «отправить» (после паузы)
+      Отправлять голосом сам, без нажатия ➤
+    </label>
+    <label class="check" style="margin-top:8px;">
+      <input type="checkbox" id="voiceSilenceSend" onchange="window.setVoiceSilenceSend(this.checked)">
+      …и через 3 секунды тишины, без слова «отправить»
     </label>
 
     <div class="data-btns">
@@ -4212,9 +4216,12 @@ let voiceRec = null;        // контроллер идущей записи, �
 let voiceBase = '';         // текст, который был в поле до начала диктовки
 let voiceDraft = '';        // распознанный в этой сессии текст (без voiceBase)
 let voiceLastError = null;
-/* Голосовая отправка: распознали «отправить» → ждём тишину sendDelay мс.
+/* Голосовая отправка: тишина → сообщение уходит само.
+   command — сказали «отправить», ждём sendDelay мс;
+   silence — просто замолчали, ждём VOICE_SILENCE_MS (3 с).
    Пока armed, плашка показывает обратный отсчёт, кнопка «Отменить» снимает его. */
 let voiceArmed = false;
+let voiceArmKind = '';        // 'command' | 'silence' — чей сейчас отсчёт
 let voiceSendTimer = null;
 let voiceTickTimer = null;
 let voiceSendLeft = 0;
@@ -4423,6 +4430,12 @@ function updateVoiceUi() {
   if (profile && profile.value !== voiceSettings.profile) profile.value = voiceSettings.profile;
   const auto = document.getElementById('voiceAutoSend');
   if (auto) auto.checked = voiceSettings.autoSend !== false;
+  const silence = document.getElementById('voiceSilenceSend');
+  if (silence) {
+    silence.checked = voiceSettings.silenceSend !== false;
+    /* Без общего автоотправки режим тишины ничего не делает — не делаем вид, что он жив. */
+    silence.disabled = voiceSettings.autoSend === false;
+  }
   renderVoiceChoices();
   const hint = document.getElementById('voiceProfileHint');
   if (hint) hint.textContent = voiceProfileHintText();
@@ -4552,6 +4565,17 @@ window.setVoiceAutoSend = function (checked) {
   updateVoiceUi();
 };
 
+/* Отправка по тишине: замолчали на 3 секунды — сообщение уходит само.
+   Выключили на ходу — снимаем уже идущий отсчёт, иначе настройка врёт. */
+window.setVoiceSilenceSend = function (checked) {
+  voiceSettings = Object.assign({}, voiceSettings, { silenceSend: checked === true });
+  if (!voice.saveSettings(voiceSettings, localStorage)) {
+    toast('Не удалось сохранить настройку: браузер не дал доступ к localStorage', 'bad');
+  }
+  if (!voiceSettings.silenceSend && voiceArmKind === 'silence') cancelVoiceSend('');
+  updateVoiceUi();
+};
+
 /* ---------- Голосовая плашка ---------- */
 /* Одна плашка на все состояния: «слушаю», «отправлю через N», «нажмите ⏹».
    Пока она видна, пользователь понимает, что микрофон ещё открыт. */
@@ -4574,12 +4598,15 @@ function hideVoiceHint() {
   if (box) box.hidden = true;
 }
 
-/* Состояние прослушивания в подсказке зависит от настройки автоотправки:
-   обещать «скажите отправить», когда она выключена, — обманывать. */
+/* Состояние прослушивания в подсказке зависит от настроек отправки:
+   обещать «скажите отправить», когда хватает тишины, — путать пользователя. */
 function voiceListeningHint() {
-  return voiceSettings.autoSend
-    ? 'Слушаю… скажите «отправить», и сообщение уйдёт после паузы'
-    : 'Слушаю… нажмите ⏹, когда закончите';
+  if (voiceSettings.autoSend === false) return 'Слушаю… нажмите ⏹, когда закончите';
+  if (voiceSettings.silenceSend !== false) {
+    return 'Слушаю… сообщение уйдёт само, если замолчать на ' +
+      Math.round(voice.VOICE_SILENCE_MS / 1000) + ' секунды';
+  }
+  return 'Слушаю… скажите «отправить», и сообщение уйдёт после паузы';
 }
 
 function stopVoice() {
@@ -4603,9 +4630,10 @@ window.voiceHintAction = function () {
   stopVoice();
 };
 
-/* Диктовка: распознанный текст дописывается в поле. Отправляет только
-   отдельная команда «отправить» (и только после паузы) — чтобы случайно
-   сказанное слово не улетело помощнику. */
+/* Диктовка: распознанный текст дописывается в поле. Дальше два пути отправки:
+   слово «отправить» — через 2 секунды, обычная пауза в 3 секунды — сама.
+   Оба пути показывают отсчёт и дают «Отменить», чтобы случайное молчание
+   не отправило недописанную фразу. */
 window.toggleDictation = function () {
   if (voiceRec) {
     stopVoice();
@@ -4663,8 +4691,9 @@ function listenOnce() {
   }
 }
 
-/* Разбор распознанного. Команда «отправить» понимается только в конце фразы:
-   «отправь письмо Пете» — это текст, «купить молоко отправить» — текст плюс команда. */
+/* Разбор распознанного. Слово «отправить» понимается только в конце фразы:
+   «отправь письмо Пете» — это текст, «купить молоко отправить» — текст плюс команда.
+   Без команды сообщение уходит само после паузы: молчание — тоже согласие. */
 function handleVoiceResult(result) {
   const field = document.getElementById('chatInput');
   if (!field || !result) return;
@@ -4687,7 +4716,7 @@ function handleVoiceResult(result) {
         toast('Автоотправка выключена — нажмите ➤', 'ok');
         return;
       }
-      armVoiceSend();
+      armVoiceSend(voiceSettings.sendDelay, 'command');
       return;
     }
     voiceDraft = voice.composeText(voiceDraft, result.final, '');
@@ -4696,10 +4725,26 @@ function handleVoiceResult(result) {
   resizeChatInput();
   if (voiceArmed) {
     /* Пользователь продолжил говорить — значит ещё не закончил: отсчёт заново. */
-    armVoiceSend();
+    armVoiceSend(voiceArmDelay(), voiceArmKind);
+    return;
+  }
+  /* Замолчали, а текст уже есть — ждём три секунды и отправляем сами.
+     Любое новое слово перезапустит отсчёт через эту же ветку. */
+  if (voice.silenceSendReady(voiceSettings, field.value)) {
+    armVoiceSend(voice.VOICE_SILENCE_MS, 'silence');
     return;
   }
   showVoiceHint(voiceListeningHint(), true, false);
+}
+
+/* Сколько ждать именно для текущего вида отсчёта. */
+function voiceArmDelay() {
+  return voiceArmKind === 'silence' ? voice.VOICE_SILENCE_MS : voiceSettings.sendDelay;
+}
+
+function chatViewActive() {
+  const chat = document.getElementById('view-chat');
+  return !!(chat && chat.classList.contains('active'));
 }
 
 function handleVoiceError(code, message) {
@@ -4733,10 +4778,13 @@ function handleVoiceEnd() {
   voiceRec = null;
   updateVoiceUi();
   renderDiag();
-  /* Окно подтверждения идёт своим таймером: перезапуск микрофона не нужен. */
-  if (voiceArmed) return;
-  const chat = document.getElementById('view-chat');
-  if (voiceAutoListen && chat && chat.classList.contains('active')) {
+  /* Пока идёт отсчёт, микрофон снова открываем: тогда продолжающаяся фраза
+     перезапускает его, а «отмена» голосом работает, а не только кнопкой. */
+  if (voiceArmed) {
+    if (voiceAutoListen && chatViewActive() && !aiBusy) restartListening();
+    return;
+  }
+  if (voiceAutoListen && chatViewActive()) {
     restartListening();
     return;
   }
@@ -4755,18 +4803,24 @@ function clearVoiceSendTimer() {
   voiceSendTimer = null;
   voiceTickTimer = null;
   voiceArmed = false;
+  voiceArmKind = '';
   const box = document.getElementById('voiceHint');
   if (box) box.classList.remove('armed');
 }
 
-/* «Отправить» → окно sendDelay мс. Тишина истекла — сообщение уходит.
+/* Отсчёт до отправки: «отправить» → sendDelay, тишина → VOICE_SILENCE_MS.
    Любое новое слово перезапускает окно, «отмена»/«нет»/«стоп» — снимает его. */
-function armVoiceSend() {
+function armVoiceSend(delay, kind) {
   clearTimeout(voiceSendTimer);
   clearInterval(voiceTickTimer);
+  if (kind === 'command' || kind === 'silence') voiceArmKind = kind;
+  else if (!voiceArmKind) voiceArmKind = 'command';
+  const asked = Number(delay);
+  const total = Number.isFinite(asked) && asked > 0 ? Math.round(asked) : voiceArmDelay();
   voiceArmed = true;
-  voiceSendLeft = Math.ceil(voiceSettings.sendDelay / 1000);
-  const paint = () => showVoiceHint('Отправлю через ' + voiceSendLeft + '… · скажите «отмена», чтобы передумать', true, true);
+  voiceSendLeft = Math.ceil(total / 1000);
+  const label = voiceArmKind === 'silence' ? 'Замолчали — отправлю через ' : 'Отправлю через ';
+  const paint = () => showVoiceHint(label + voiceSendLeft + '… · скажите «отмена», чтобы передумать', true, true);
   paint();
   voiceTickTimer = setInterval(() => {
     voiceSendLeft = Math.max(0, voiceSendLeft - 1);
@@ -4777,8 +4831,15 @@ function armVoiceSend() {
     voiceTickTimer = null;
     voiceSendTimer = null;
     voiceArmed = false;
+    voiceArmKind = '';
+    /* Ушли на другую вкладку — отправлять в никуда нельзя. */
+    if (!chatViewActive()) {
+      hideVoiceHint();
+      updateVoiceUi();
+      return;
+    }
     sendVoiceMessage();
-  }, voiceSettings.sendDelay);
+  }, total);
 }
 
 function cancelVoiceSend(message) {
@@ -4795,6 +4856,14 @@ function sendVoiceMessage() {
     return;
   }
   voiceDraft = '';
+  /* Открытая сессия может прислать финальный текст уже отправленной фразы —
+     он вернулся бы в поле и через 3 секунды ушёл второй раз. Гасим сессию:
+     новую начнёт restartListening, уже с пустым полем. */
+  if (voiceRec) {
+    const rec = voiceRec;
+    voiceRec = null;
+    try { rec.abort(); } catch (e) { /* сессия уже закрыта браузером */ }
+  }
   if (voiceAutoListen) {
     showVoiceHint('Отправлено. ' + voiceListeningHint(), true, false);
     if (!voiceRec) restartListening();

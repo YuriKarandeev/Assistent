@@ -27,6 +27,10 @@ export const VOICE_MAX_PITCH = 2;
 export const VOICE_MAX_SPEECH = 600;
 /* Сколько тишины после слова «отправить» считается подтверждением отправки. */
 export const VOICE_SEND_WINDOW_MS = 2000;
+/* Сколько тишины после последней распознанной фразы считается концом мысли:
+   тогда сообщение уходит само, без слова «отправить». Три секунды — компромисс
+   между «не перебивать размышление вслух» и «не заставлять ждать». */
+export const VOICE_SILENCE_MS = 3000;
 
 /* Особое значение voiceURI: голос не выбирать вообще. Тогда браузер играет
    голосом по умолчанию для ru-RU — тем, что выбран в настройках устройства.
@@ -59,6 +63,7 @@ export const DEFAULT_SETTINGS = {
   gender: '',
   voiceURI: '',
   autoSend: true,
+  silenceSend: true,
   sendDelay: VOICE_SEND_WINDOW_MS
 };
 
@@ -151,6 +156,7 @@ export function normalizeSettings(raw) {
     gender,
     voiceURI: typeof src.voiceURI === 'string' ? src.voiceURI.trim() : '',
     autoSend: src.autoSend !== false,
+    silenceSend: src.silenceSend !== false,
     sendDelay: clampSendDelay(src.sendDelay)
   };
 }
@@ -291,6 +297,15 @@ export function isCancelCommand(value) {
   const norm = normalizeCommand(value);
   if (!norm) return false;
   return CANCEL_COMMANDS.indexOf(norm) >= 0;
+}
+
+/* Отправлять ли по тишине: нужен непустой текст и обе включённые настройки.
+   Общий выключатель autoSend важнее отдельного режима — выключили автоотправку,
+   и молчание перестаёт отправлять что-либо. */
+export function silenceSendReady(settings, value) {
+  const opts = normalizeSettings(settings);
+  if (!opts.autoSend || !opts.silenceSend) return false;
+  return !!text(value);
 }
 
 export function voiceErrorText(code) {
@@ -556,7 +571,11 @@ export function voiceSummary(win, settings) {
   const maleMissing = opts.gender === 'male' && !!voice &&
     !VOICE_MALE_NAMES.test(String(voice.name || ''));
   const profileText = preset.title + (maleMissing ? ' (мужской голос не найден)' : '');
+  /* Режим отправки виден в диагностике: иначе непонятно, почему сообщение
+     ушло само или, наоборот, не ушло без слова «отправить». */
+  const sendText = !opts.autoSend ? 'выкл'
+    : (opts.silenceSend ? 'по тишине ' + Math.round(VOICE_SILENCE_MS / 1000) + ' с' : 'по слову «отправить»');
   return 'распознавание: ' + recognition + ' · озвучка: ' + (opts.speakReplies ? 'вкл' : 'выкл') +
-    ' · голос: ' + voiceText + ' · профиль: ' + profileText;
+    ' · голос: ' + voiceText + ' · профиль: ' + profileText + ' · отправка: ' + sendText;
 }
 

@@ -1,7 +1,7 @@
 /* Service worker приложения «Личный ассистент».
    Оболочка кэшируется, запросы к Firebase и CDN не перехватываются.
    Навигация — network-first: после обновления файла достаточно перезагрузить страницу. */
-const CACHE_NAME = 'assistant-planer-v11';
+const CACHE_NAME = 'assistant-planer-v12';
 
 const SHELL = [
   './',
