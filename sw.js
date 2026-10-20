@@ -15,6 +15,7 @@ const SHELL = [
   './sync-merge.js',
   './ai.js',
   './voice.js',
+  './push.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
