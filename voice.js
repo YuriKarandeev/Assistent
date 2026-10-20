@@ -211,13 +211,17 @@ export function recognitionOptions(options) {
 }
 
 /* Разбор события onresult: нужны и промежуточный текст (показываем сразу),
-   и финальный (его отправляем наверх). */
-export function readResults(event) {
+   и финальный (его отправляем наверх).
+   fromIndex — event.resultIndex: в continuous-режиме браузер присылает ВСЕ
+   результаты сессии, и без этого текст дублировался бы при каждом обновлении. */
+export function readResults(event, fromIndex) {
   const results = event && event.results ? event.results : [];
   const length = Number(results.length) || 0;
+  let start = Number(fromIndex);
+  if (!Number.isFinite(start) || start < 0 || start > length) start = 0;
   const finalParts = [];
   const interimParts = [];
-  for (let i = 0; i < length; i++) {
+  for (let i = start; i < length; i++) {
     const item = results[i];
     const alt = item && item[0] ? item[0] : null;
     const chunk = alt && alt.transcript ? text(alt.transcript) : '';
@@ -320,7 +324,9 @@ export function recognize(win, handlers, options) {
   };
 
   rec.onresult = event => {
-    const parsed = readResults(event);
+    /* resultIndex указывает на первый изменившийся результат: только с него
+       и читаем, иначе в continuous-режиме текст приходит повторно */
+    const parsed = readResults(event, event ? event.resultIndex : 0);
     if (typeof safe.onResult === 'function') safe.onResult(parsed);
   };
   rec.onerror = event => {
