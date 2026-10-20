@@ -77,8 +77,17 @@ async function sendToSubscription(subscription, payload) {
 }
 
 async function main() {
-  if (!config.serviceAccount) fail('нет FIREBASE_SERVICE_ACCOUNT (секрет репозитория)');
-  if (!config.publicKey || !config.privateKey) fail('нет VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY (секреты репозитория)');
+  /* Пока секретов нет, расписание не должно краснеть каждые 5 минут: это не
+     сбой, а незаконченная настройка. Выходим с кодом 0 и понятным логом. */
+  const missing = [];
+  if (!config.serviceAccount) missing.push('FIREBASE_SERVICE_ACCOUNT');
+  if (!config.publicKey) missing.push('VAPID_PUBLIC_KEY');
+  if (!config.privateKey) missing.push('VAPID_PRIVATE_KEY');
+  if (missing.length) {
+    log('секреты не заданы:', missing.join(', '));
+    log('напоминания не отправляются. Добавьте их: Settings -> Secrets and variables -> Actions.');
+    return;
+  }
 
   admin.initializeApp({
     credential: admin.credential.cert(JSON.parse(config.serviceAccount))
