@@ -1059,12 +1059,17 @@
     inset: 0;
     background: rgba(0,0,0,.5);
     display: none;
-    align-items: center;
-    justify-content: center;
     z-index: 100;
-    padding: 16px;
+    padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+    /* Прокручивается сама подложка, а не страница под ней: на телефоне 💾 выше
+       экрана, и без этого палец уводил скролл на фон. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .modal-overlay.active { display: flex; }
+  /* Пока модалка открыта, фон под ней не двигается. */
+  body:has(.modal-overlay.active) { overflow: hidden; }
   .modal {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -1073,6 +1078,9 @@
     width: 100%;
     max-width: 420px;
     box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    /* margin:auto вместо align-items/justify-content: center — центрирует, пока
+       модалка влезает в экран, и не обрезает верх, когда не влезает. */
+    margin: auto;
   }
   .modal h3 { margin: 0 0 12px; font-size: 15px; }
   .modal input { width: 100%; margin-bottom: 14px; }
@@ -1587,10 +1595,11 @@
     </div>
 
     <div class="data-note" style="margin-top:14px;">
-      Голос помощника. «Джарвис-стиль» — это низкий мужской русский голос чуть медленнее
+      Голос помощника. «Джарвис-стиль» — низкий мужской русский голос чуть медленнее
       обычного; настоящего голоса Джарвиса в системе нет, поэтому звучание зависит от
-      голосов, установленных на устройстве. На iPhone мужской голос скачивается в
-      Настройки → Универсальный доступ → Контент и чтение → Голоса → Русский → «Юрий».
+      голосов, установленных на устройстве. Скачать мужской:
+      Настройки → Универсальный доступ → Контент для чтения → Голоса → Русский →
+      «Юрий» → скачать, затем нажать «Юрий» ещё раз: скачивание ≠ выбор.
     </div>
     <div class="data-row">
       <select id="voiceProfile" style="flex:1;min-width:150px;" onchange="window.setVoiceProfile(this.value)">
@@ -1599,7 +1608,18 @@
       </select>
       <button class="ghost" onclick="window.previewVoice()">▶ Прослушать</button>
     </div>
+    <div class="data-row" style="margin-top:8px;">
+      <select id="voiceChoice" style="flex:1;min-width:150px;" onchange="window.setVoiceName(this.value)">
+        <option value="system">Системный (как в настройках iPhone)</option>
+        <option value="">Авто: мужской, если есть</option>
+      </select>
+      <button class="ghost" onclick="window.refreshVoices()">↻ Голоса</button>
+    </div>
     <div class="data-note" id="voiceProfileHint" style="margin-top:8px;"></div>
+    <details id="voiceListBox" style="margin-top:6px;">
+      <summary class="data-note" id="voiceListSummary" style="cursor:pointer;">Все голоса в системе</summary>
+      <div class="data-note" id="voiceListText" style="margin-top:6px;"></div>
+    </details>
     <label class="check" style="margin-top:8px;">
       <input type="checkbox" id="voiceAutoSend" onchange="window.setVoiceAutoSend(this.checked)">
       Отправлять по слову «отправить» (после паузы)
@@ -4403,19 +4423,64 @@ function updateVoiceUi() {
   if (profile && profile.value !== voiceSettings.profile) profile.value = voiceSettings.profile;
   const auto = document.getElementById('voiceAutoSend');
   if (auto) auto.checked = voiceSettings.autoSend !== false;
+  renderVoiceChoices();
   const hint = document.getElementById('voiceProfileHint');
   if (hint) hint.textContent = voiceProfileHintText();
 }
 
+/* Список «Голос»: системный режим, авто по профилю и каждый русский голос.
+   Порядок важен: системный первым — на iPhone он единственный, который может
+   звучать скачанным «Юрием». */
+function renderVoiceChoices() {
+  const select = document.getElementById('voiceChoice');
+  const voices = voice.listVoices(window);
+  if (select) {
+    const items = [
+      { value: voice.VOICE_SYSTEM, label: 'Системный (как в настройках iPhone)' },
+      { value: '', label: 'Авто: мужской, если есть' }
+    ];
+    voices.forEach(v => {
+      if (v && v.voiceURI) items.push({ value: v.voiceURI, label: v.name || 'без имени' });
+    });
+    select.innerHTML = '';
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      select.appendChild(opt);
+    });
+    /* Сохранённого голоса может уже не быть (удалили в системе) — показываем
+       «Авто», чтобы селект не выглядел пустым. */
+    const known = items.some(item => item.value === voiceSettings.voiceURI);
+    select.value = known ? voiceSettings.voiceURI : '';
+  }
+  const summary = document.getElementById('voiceListSummary');
+  if (summary) summary.textContent = 'Все голоса в системе (' + voices.length + ')';
+  const list = document.getElementById('voiceListText');
+  if (list) list.textContent = voice.voiceDebug(window);
+}
+
 /* Что реально звучит сейчас: профиль — это пресет, а голос берётся из системы.
-   Если мужского русского голоса нет, честно пишем это в 💾. */
+   Если мужского русского голоса нет, честно пишем это в 💾 и подсказываем,
+   что скачивание голоса и его выбор — два разных действия. */
 function voiceProfileHintText() {
   if (!voice.canSpeak(window)) return 'Этот браузер не умеет озвучивать текст.';
-  const picked = voice.pickVoice(voice.listVoices(window), voiceSettings.voiceURI, voiceSettings.gender);
-  if (!picked) return 'Русский голос не найден: добавьте его в настройках системы.';
-  const name = picked.name || 'без имени';
+  const voices = voice.listVoices(window);
+  const picked = voice.resolveVoice(voices, voiceSettings.voiceURI, voiceSettings.gender);
+  if (picked.mode === 'system') {
+    return 'Звучит голос, выбранный в настройках устройства. Приложению сейчас видны: ' +
+      (voices.length ? voices.map(v => v.name || 'без имени').join(', ') : 'ни одного голоса') + '.';
+  }
+  if (!picked.voice) {
+    return 'Русский голос не найден. iPhone: Настройки → Универсальный доступ → ' +
+      'Контент для чтения → Голоса → Русский → «Юрий». После скачивания нажмите «Юрий» ещё раз ' +
+      '(скачивание ≠ выбор) и полностью закройте приложение.';
+  }
+  const name = picked.voice.name || 'без имени';
   if (voiceSettings.gender === 'male' && !voice.VOICE_MALE_NAMES.test(name)) {
-    return 'Сейчас звучит «' + name + '» — мужской русский голос не найден.';
+    return 'Сейчас звучит «' + name + '» — мужской русский голос не найден. Скачайте «Юрия»: ' +
+      'Настройки → Универсальный доступ → Контент для чтения → Голоса → Русский → «Юрий», ' +
+      'затем нажмите «Юрий» ещё раз. Если он так и не появился в списке — выберите «Системный».';
   }
   return 'Сейчас звучит «' + name + '».';
 }
@@ -4427,6 +4492,11 @@ const VOICE_PREVIEW_TEXT = 'Добрый вечер. Я на связи и го�
 window.setVoiceProfile = function (value) {
   const preset = voice.profileSettings(value);
   voiceSettings = Object.assign({}, voiceSettings, preset);
+  /* Профиль «Джарвис-стиль» с сохранённой женской озвучкой звучал бы как обычный
+     голос: сбрасываем ручной выбор, чтобы профиль реально работал. */
+  if (voice.voiceContradictsProfile(voice.listVoices(window), voiceSettings)) {
+    voiceSettings = Object.assign({}, voiceSettings, { voiceURI: '' });
+  }
   if (!voice.saveSettings(voiceSettings, localStorage)) {
     toast('Не удалось сохранить настройку: браузер не дал доступ к localStorage', 'bad');
   }
@@ -4435,6 +4505,31 @@ window.setVoiceProfile = function (value) {
   if (!voice.speak(VOICE_PREVIEW_TEXT, voiceSettings)) {
     toast('Профиль сохранён, но озвучить не удалось — проверьте голоса в системе', 'bad');
   }
+};
+
+/* Ручной выбор голоса. Пустая строка — «Авто» (мужской, если есть),
+   'system' — не выбирать голос и отдать выбор системе. */
+window.setVoiceName = function (value) {
+  voiceSettings = Object.assign({}, voiceSettings, { voiceURI: String(value || '') });
+  if (!voice.saveSettings(voiceSettings, localStorage)) {
+    toast('Не удалось сохранить настройку: браузер не дал доступ к localStorage', 'bad');
+  }
+  updateVoiceUi();
+  renderDiag();
+  /* Сразу слушаем результат: заодно это жест, который iOS требует для speak. */
+  if (!voice.speak(VOICE_PREVIEW_TEXT, voiceSettings)) {
+    toast('Голос сохранён, но озвучить не удалось — проверьте голоса в системе', 'bad');
+  }
+};
+
+/* iOS кэширует список голосов на процесс: после скачивания «Юрия» его видно
+   только после перезапуска. Кнопка перечитывает список без перезапуска. */
+window.refreshVoices = function () {
+  const voices = voice.listVoices(window);
+  updateVoiceUi();
+  renderDiag();
+  toast('Голосов найдено: ' + voices.length +
+    (voices.length ? ' — ' + voices.map(v => v.name || 'без имени').join(', ') : ''), 'ok');
 };
 
 /* Кнопка «Прослушать»: заодно даёт жест, которого iOS требует для первого speak. */
@@ -4803,6 +4898,8 @@ window.openDataModal = function () {
       : 'Вход не выполнен — данные только на этом устройстве.';
   }
   renderDiag();
+  /* Список голосов мог измениться (скачали «Юрия») — обновляем при каждом открытии. */
+  updateVoiceUi();
   document.getElementById('dataModal').classList.add('active');
 };
 
@@ -4861,6 +4958,7 @@ function diagText() {
     'assistant: ' + (ai.getKey(localStorage) ? 'key set' : 'no key') +
       ', last error: ' + (aiLastError ? aiLastError.code : '-'),
     'voice: ' + voice.voiceSummary(window, voiceSettings),
+    'voices: ' + voice.voiceDebug(window),
     'data: ' + summaryText(state)
   ].join('\n');
 }

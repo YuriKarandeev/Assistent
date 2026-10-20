@@ -28,6 +28,12 @@ export const VOICE_MAX_SPEECH = 600;
 /* Сколько тишины после слова «отправить» считается подтверждением отправки. */
 export const VOICE_SEND_WINDOW_MS = 2000;
 
+/* Особое значение voiceURI: голос не выбирать вообще. Тогда браузер играет
+   голосом по умолчанию для ru-RU — тем, что выбран в настройках устройства.
+   Это единственный способ услышать скачанный «Юрий» на iPhone: WebKit часто
+   не отдаёт скачанные голоса в getVoices(), и выбирать там нечего. */
+export const VOICE_SYSTEM = 'system';
+
 /* Профили озвучки — это пресеты, а не отдельные голоса: Web Speech API играет
    только системными голосами устройства и умеет менять лишь высоту и скорость.
    «Джарвис-стиль» = низкий мужской русский голос, чуть медленнее обычного.
@@ -410,6 +416,41 @@ export function pickVoice(voices, voiceURI, gender) {
   return fallback;
 }
 
+/* Голос для озвучки с учётом особого режима «системный». Возвращает
+   { voice, mode }: в системном режиме voice === null, и speak не ставит
+   utter.voice — тогда браузер берёт голос по умолчанию для своего языка. */
+export function resolveVoice(voices, voiceURI, gender) {
+  if (text(voiceURI) === VOICE_SYSTEM) return { voice: null, mode: 'system' };
+  return { voice: pickVoice(voices, voiceURI, gender), mode: 'auto' };
+}
+
+/* Выбранный вручную голос может противоречить профилю: скачали «Юрия», выбрали
+   «Джарвис-стиль», а звучит сохранённая ранее «Ирина». Профиль в таком случае
+   сбрасывает ручной выбор — иначе настройка выглядит сломанной. */
+export function voiceContradictsProfile(voices, settings) {
+  const opts = normalizeSettings(settings);
+  if (!opts.voiceURI || opts.voiceURI === VOICE_SYSTEM) return false;
+  if (opts.gender !== 'male') return false;
+  const items = Array.isArray(voices) ? voices.filter(v => v && typeof v === 'object') : [];
+  const saved = items.find(v => v.voiceURI === opts.voiceURI);
+  if (!saved) return false;
+  return !VOICE_MALE_NAMES.test(String(saved.name || ''));
+}
+
+/* Все голоса, которые реально видит браузер, одной строкой. На iPhone это
+   единственный способ понять, отдаёт ли WebKit скачанный голос: в 💾 и в
+   диагностике видно имя, язык, локальность и признак «по умолчанию». */
+export function voiceDebug(win) {
+  const items = listVoices(win);
+  if (!items.length) return 'голосов нет';
+  return items.map(v => {
+    const parts = [text(v && v.name) || 'без имени', text(v && v.lang) || '?'];
+    if (v && v.localService === true) parts.push('local');
+    if (v && v.default === true) parts.push('default');
+    return parts.join('|');
+  }).join('; ');
+}
+
 /* iOS отдаёт список голосов асинхронно: до события voiceschanged getVoices()
    пуст, и первый speak ушёл бы вообще без голоса. Ждём событие один раз. */
 export function whenVoicesReady(win, callback) {
@@ -471,10 +512,12 @@ export function speak(value, settings, deps) {
     utter.lang = VOICE_LANG;
     utter.rate = opts.rate;
     utter.pitch = opts.pitch;
-    const voice = Object.prototype.hasOwnProperty.call(extra, 'voice')
-      ? extra.voice
-      : pickVoice(listVoices(w), opts.voiceURI, opts.gender);
-    if (voice) utter.voice = voice;
+    const picked = Object.prototype.hasOwnProperty.call(extra, 'voice')
+      ? { voice: extra.voice, mode: 'auto' }
+      : resolveVoice(listVoices(w), opts.voiceURI, opts.gender);
+    /* В системном режиме utter.voice не ставим вообще — тогда iOS говорит
+       голосом, выбранным в настройках телефона (им же читает Siri). */
+    if (picked.voice) utter.voice = picked.voice;
     synth.speak(utter);
     return true;
   } catch (e) {
@@ -501,9 +544,11 @@ export function voiceSummary(win, settings) {
   const opts = normalizeSettings(settings);
   const recognition = recognitionAvailable(w) ? 'да' : 'нет';
   const tts = canSpeak(w) ? 'да' : 'нет';
-  const voice = pickVoice(listVoices(w), opts.voiceURI, opts.gender);
+  const picked = resolveVoice(listVoices(w), opts.voiceURI, opts.gender);
+  const voice = picked.voice;
   let voiceText = 'нет русского';
-  if (voice) voiceText = voice.name || 'без имени';
+  if (picked.mode === 'system' && tts === 'да') voiceText = 'системный (выбирает устройство)';
+  else if (voice) voiceText = voice.name || 'без имени';
   else if (tts !== 'да') voiceText = 'нет синтеза';
   const preset = VOICE_PROFILES[opts.profile];
   /* Честность важнее красоты: если мужского русского голоса в системе нет,
