@@ -31,19 +31,22 @@ concurrency:
 
 jobs:
   notify:
-    runs-on: ubuntu-latest
+    # ubuntu-latest переезжает на новый образ без предупреждения — фиксируем версию
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:
       run:
         working-directory: _push
     steps:
       - name: Забрать код
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # 22, а не 24: firebase-admin ^12.7.0 гарантированно поддерживает 18+,
+          # а Node 24 требует firebase-admin 14 (менять обе зависимости сразу — лишний риск)
+          node-version: '22'
 
       - name: Зависимости
         run: npm install --omit=dev --no-audit --no-fund
