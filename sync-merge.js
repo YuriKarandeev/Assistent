@@ -11,7 +11,9 @@
  * Модуль чистый: без DOM и без Firebase — поэтому его можно проверять отдельно.
  */
 
-export const SYNC_LISTS = ['tasks', 'kanbanCards', 'works', 'programs', 'events', 'projects', 'messages'];
+/* Справочник лекарств (state.meds) тоже список с id: сливаем его по тем же правилам,
+   иначе устройство без своего справочника затирало бы чужой. */
+export const SYNC_LISTS = ['tasks', 'kanbanCards', 'works', 'programs', 'events', 'projects', 'messages', 'meds'];
 
 /* Сколько дней помним надгробия. За это время все устройства успевают синхронизироваться. */
 export const TOMBSTONE_DAYS = 30;

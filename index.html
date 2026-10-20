@@ -86,8 +86,8 @@
   }
   header h1 { font-size: 15px; margin: 0; font-weight: 600; white-space: nowrap; }
   header .spacer { flex: 1; }
-  /* Кнопка «Помощник» стоит сразу после плашки: на узком экране шапка
-     переносится, но кнопка остаётся рядом с заголовком */
+  /* Кнопки «Помощник» 💬 и «Все разделы» ☰ стоят сразу после плашки: на узком
+     экране шапка переносится, но кнопки остаются рядом с заголовком */
   #btnAssistant { padding: 5px 9px; line-height: 1; font-size: 14px; }
   .tabs {
     display: flex;
@@ -657,6 +657,61 @@
     margin-right: 6px;
     vertical-align: middle;
   }
+
+  /* СПРАВОЧНИК ЛЕКАРСТВ */
+  .med-sum { color: var(--accent); font-weight: 600; }
+  .med-names { font-size: 10.5px; color: var(--muted); line-height: 1.35; margin: -2px 0 2px; }
+  .med-total {
+    font-size: 11px;
+    color: var(--accent);
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .med-off { color: var(--muted); font-size: 11px; }
+  .med-hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 0 0 12px; }
+  .med-foot { font-size: 12px; color: var(--muted); margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .med-foot b { color: var(--text); }
+  .med-form input[type=number] { width: 100px; }
+  .med-form select { min-width: 130px; }
+  /* Две панели подряд: график состояния и график приёма */
+  .chart-panel + .chart-panel { margin-top: 16px; }
+
+  /* МЕНЮ РАЗДЕЛОВ В ШАПКЕ */
+  .views-menu { position: relative; display: inline-flex; }
+  #btnViews { padding: 5px 9px; line-height: 1; font-size: 14px; }
+  .views-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 60;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px;
+    min-width: 240px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.35);
+  }
+  .views-panel[hidden] { display: none; }
+  .views-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .views-item:hover { border-color: var(--accent); }
+  .views-item.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .views-item .views-icon { font-size: 15px; line-height: 1; }
 
   .empty {
     color: var(--muted);
@@ -1304,6 +1359,21 @@
     header { gap: 8px; padding: calc(8px + var(--safe-top)) 12px 8px; }
     header h1 { font-size: 14px; }
     #btnAssistant { padding: 4px 7px; font-size: 13px; }
+    #btnViews { padding: 4px 7px; font-size: 13px; }
+    /* На телефоне меню разделов — лист снизу: так до него достаёт большой палец,
+       и оно не уезжает за край экрана от кнопки в шапке */
+    .views-panel {
+      position: fixed;
+      top: auto;
+      left: 8px;
+      right: 8px;
+      bottom: calc(8px + var(--safe-bottom));
+      width: auto;
+      min-width: 0;
+      grid-template-columns: 1fr 1fr;
+    }
+    .med-form input[type=number] { width: 84px; }
+    .med-form select { flex: 1; min-width: 0; }
     .theme-toggle .opt { padding: 5px 8px; font-size: 11px; }
     .header-actions button { padding: 6px 10px; font-size: 12px; }
     main { padding: 12px 12px calc(12px + var(--safe-bottom)); }
@@ -1391,6 +1461,12 @@
   <h1>🎯 Личный ассистент</h1>
   <button class="ghost mini" id="btnAssistant" onclick="window.openAssistant()"
     title="Открыть помощника" aria-label="Открыть помощника">💬</button>
+  <!-- ☰ — те же разделы, что и в строке вкладок: на телефоне вкладки уезжают за край -->
+  <div class="views-menu" id="viewsMenu">
+    <button class="ghost mini" id="btnViews" onclick="window.toggleViewsMenu(event)"
+      title="Все разделы" aria-label="Все разделы" aria-haspopup="menu" aria-expanded="false">☰</button>
+    <div class="views-panel" id="viewsPanel" role="menu" hidden></div>
+  </div>
   <div class="spacer"></div>
   <div class="header-actions">
     <span class="sync-badge" id="syncBadge" title="Статус синхронизации">
@@ -1476,26 +1552,66 @@
   </section>
 
   <section class="view active" id="view-health">
-    <div class="health-grid" id="healthGrid"></div>
-    <div class="chart-panel">
-      <div class="chart-head">
-        <h3>📈 Динамика состояния</h3>
-        <div class="seg" id="chartSeg">
-          <button data-range="month" class="active">Месяц</button>
-          <button data-range="quarter">3 мес</button>
-          <button data-range="year">Год</button>
+    <div class="subtabs" id="healthSubtabs">
+      <div class="subtab active" data-health-view="diary">📓 Дневник</div>
+      <div class="subtab" data-health-view="meds">💊 Справочник</div>
+    </div>
+
+    <div id="healthDiaryTab">
+      <div class="health-grid" id="healthGrid"></div>
+      <div class="chart-panel">
+        <div class="chart-head">
+          <h3>📈 Динамика состояния</h3>
+          <div class="seg" id="chartSeg">
+            <button data-range="month" class="active">Месяц</button>
+            <button data-range="quarter">3 мес</button>
+            <button data-range="year">Год</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="healthChart" height="220"></canvas>
+        </div>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:var(--warn)"></span>Подъём</span>
+          <span><span class="dot" style="background:var(--ok-soft)"></span>Лёгкий +</span>
+          <span><span class="dot" style="background:var(--ok)"></span>Норма</span>
+          <span><span class="dot" style="background:var(--bad-soft)"></span>Лёгкий −</span>
+          <span><span class="dot" style="background:var(--bad)"></span>Спад</span>
         </div>
       </div>
-      <div class="chart-wrap">
-        <canvas id="healthChart" height="220"></canvas>
+
+      <div class="chart-panel">
+        <div class="chart-head">
+          <h3>💊 Динамика приёма</h3>
+          <div class="seg" id="medChartSeg">
+            <button data-range="month" class="active">Месяц</button>
+            <button data-range="quarter">3 мес</button>
+            <button data-range="year">Год</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="medChart" height="200"></canvas>
+        </div>
+        <div class="chart-legend" id="medChartLegend"></div>
       </div>
-      <div class="chart-legend">
-        <span><span class="dot" style="background:var(--warn)"></span>Подъём</span>
-        <span><span class="dot" style="background:var(--ok-soft)"></span>Лёгкий +</span>
-        <span><span class="dot" style="background:var(--ok)"></span>Норма</span>
-        <span><span class="dot" style="background:var(--bad-soft)"></span>Лёгкий −</span>
-        <span><span class="dot" style="background:var(--bad)"></span>Спад</span>
-      </div>
+    </div>
+
+    <div id="healthMedsTab" hidden>
+      <p class="med-hint">
+        Дозировка указывается на один приём. Если пьёте препарат дважды в день, добавьте
+        две строки — «утро» и «вечер»: в дневнике они сложатся в суточную дозу (100 + 100 = 200 мг).
+      </p>
+      <form class="hobby-form med-form" id="medForm" onsubmit="window.saveMedForm(event)">
+        <input type="text" id="medName" maxlength="60" autocomplete="off" placeholder="Название препарата">
+        <input type="number" id="medDose" min="0.1" max="1000" step="0.1" value="100"
+          inputmode="decimal" title="Дозировка в миллиграммах" aria-label="Дозировка в миллиграммах">
+        <select id="medSlot" aria-label="Время приёма"></select>
+        <button type="submit" id="medSubmit">Добавить</button>
+        <button type="button" class="ghost" id="medCancel" hidden
+          onclick="window.cancelMedEdit()">Отмена</button>
+      </form>
+      <div id="medsTable"></div>
+      <div class="med-foot" id="medFoot"></div>
     </div>
   </section>
 
@@ -1751,6 +1867,8 @@ import * as ai from './ai.js';
 import * as voice from './voice.js';
 /* Напоминания: подписка устройства и план для внешнего отправителя (см. push.js) */
 import * as push from './push.js';
+/* Лекарства: справочник, суммы доз по слотам и точки для графика (см. health.js) */
+import * as healthjs from './health.js';
 
 /* Новый проект — рабочая база */
 const firebaseConfig = {
@@ -1815,6 +1933,8 @@ const DEFAULT_STATE = {
   tasks: [],
   kanbanCards: [],
   health: {},
+  /* Справочник лекарств: { id, name, doseMg, slot, active, createdAt, updatedAt } */
+  meds: [],
   works: [],
   programs: [],
   events: [],
@@ -1830,6 +1950,9 @@ const DEFAULT_STATE = {
 };
 
 let state = loadLocal();
+/* Приводим данные к текущему формату сразу при старте: старые галочки приёма
+   превращаются в слоты, битые дни здоровья удаляются, справочник чистится */
+normalizeState();
 /* Слияние: с чем сравнивать при записи (последнее синхронизированное состояние)
    и последний снимок облака — чтобы не терять чужие добавления */
 let syncBaseline = structuredClone(state);
@@ -1858,6 +1981,8 @@ function loadLocal() {
     if (!merged.events) merged.events = [];
     if (!merged.projects) merged.projects = [];
     if (!merged.messages) merged.messages = [];
+    /* Справочник мог прийти из старой копии: чистим битые строки и дубли id */
+    merged.meds = healthjs.normalizeMedList(merged.meds);
     if (!merged.tombstones || typeof merged.tombstones !== 'object') merged.tombstones = {};
     if (merged.openProjectId === undefined) merged.openProjectId = null;
     migrateProjects(merged.projects);
@@ -2208,6 +2333,14 @@ function normalizeState() {
   });
   if (!state.tombstones || typeof state.tombstones !== 'object') state.tombstones = {};
   if (!state.health || typeof state.health !== 'object') state.health = {};
+  /* Дни здоровья: старые галочки medMorning/medEvening переводим в слоты приёма,
+     чтобы дальше был один источник правды (см. health.js) */
+  Object.keys(state.health).forEach(iso => {
+    const rec = state.health[iso];
+    if (!rec || typeof rec !== 'object') { delete state.health[iso]; return; }
+    if (!rec.meds || typeof rec.meds !== 'object') rec.meds = healthjs.daySlots(rec);
+  });
+  state.meds = healthjs.normalizeMedList(state.meds);
   if (state.openProjectId === undefined) state.openProjectId = null;
   migrateProjects(state.projects);
 }
@@ -2238,7 +2371,7 @@ function applyCloudState(cloud) {
 
 function stateIsEmpty(s) {
   if (!s) return true;
-  const lists = ['tasks', 'kanbanCards', 'works', 'programs', 'events', 'projects', 'messages'];
+  const lists = ['tasks', 'kanbanCards', 'works', 'programs', 'events', 'projects', 'messages', 'meds'];
   if (lists.some(k => Array.isArray(s[k]) && s[k].length)) return false;
   if (s.health && Object.keys(s.health).length) return false;
   // Документ с одними надгробиями — это «всё удалено», а не пустая база
@@ -2261,6 +2394,7 @@ function summaryText(s) {
   add((s.events || []).length, 'событие', 'события', 'событий');
   add((s.projects || []).length, 'проект', 'проекта', 'проектов');
   add((s.kanbanCards || []).length, 'карточка', 'карточки', 'карточек');
+  add((s.meds || []).length, 'лекарство', 'лекарства', 'лекарств');
   add(Object.keys(s.health || {}).length, 'день здоровья', 'дня здоровья', 'дней здоровья');
   return parts.length ? parts.join(', ') : 'данных нет';
 }
@@ -2407,7 +2541,10 @@ function applyTheme(t) {
   });
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', t === 'dark' ? '#0f1117' : '#f5f6fa');
-  if (document.getElementById('view-health').classList.contains('active')) drawHealthChart();
+  if (document.getElementById('view-health').classList.contains('active')) {
+    drawHealthChart();
+    drawMedChart();
+  }
 }
 document.querySelectorAll('#themeToggle .opt').forEach(o => {
   o.addEventListener('click', () => applyTheme(o.dataset.theme));
@@ -2451,8 +2588,10 @@ function switchView(name) {
   if (name === 'calendar') { renderCalendar(); renderUpcoming(); }
   if (name === 'deals') renderDeals();
   if (name === 'hobbies') renderHobbies();
-  if (name === 'health') { renderHealth(); drawHealthChart(); }
+  if (name === 'health') setHealthTab(healthTab);
   if (name === 'chat') renderChat();
+  /* Меню ☰ подсвечивает активный раздел, даже если его открыли табом */
+  renderViewsMenu();
   return true;
 }
 window.switchView = switchView;
@@ -3902,14 +4041,38 @@ const HEALTH_STATES = [
 ];
 const STATE_VALUE = { strongDown: -2, down: -1, ok: 0, up: 1, strongUp: 2 };
 
+/* Отметки приёма живут в state.health[iso].meds. Старые флаги (medMorning /
+   medEvening) пишем параллельно: устройство со старой версией из кэша увидит
+   те же галочки, а мы не потеряем правки при переходе. */
+function ensureHealthDay(iso) {
+  if (!state.health[iso] || typeof state.health[iso] !== 'object') {
+    state.health[iso] = { state: null, meds: healthjs.daySlots({}) };
+  }
+  const rec = state.health[iso];
+  if (!rec.meds || typeof rec.meds !== 'object') rec.meds = healthjs.daySlots(rec);
+  return rec;
+}
+
+/* Без updatedAt слияние в sync-merge.js не может понять, чья запись дня свежее */
+function stampHealthDay(rec) {
+  rec.updatedAt = new Date().toISOString();
+  healthjs.MED_SLOTS.forEach(slot => {
+    if (slot.legacy) rec[slot.legacy] = !!rec.meds[slot.id];
+  });
+}
+
 function renderHealth() {
   const grid = document.getElementById('healthGrid');
+  if (!grid) return;
   grid.innerHTML = '';
   const today = todayISO();
+  const slots = healthjs.visibleSlots(state.meds);
   for (let i = -3; i <= 3; i++) {
     const iso = addDays(today, i);
     const d = fromISO(iso);
-    const rec = state.health[iso] || { state: null, medMorning: false, medEvening: false };
+    const rec = state.health[iso] || {};
+    const flags = healthjs.daySlots(rec);
+    const total = healthjs.dayTotalMg(rec, state.meds);
     const card = document.createElement('div');
     card.className = 'day-card' + (i === 0 ? ' today' : '');
     card.dataset.iso = iso;
@@ -3924,16 +4087,27 @@ function renderHealth() {
         `).join('')}
       </div>
       <div class="meds">
-        <div class="med-row">
-          <span>💊 Утро</span>
-          <div class="checkbox ${rec.medMorning ? 'checked' : ''}"
-               onclick="window.toggleMed('${iso}', 'medMorning')">${rec.medMorning ? '✓' : ''}</div>
-        </div>
-        <div class="med-row">
-          <span>💊 Вечер</span>
-          <div class="checkbox ${rec.medEvening ? 'checked' : ''}"
-               onclick="window.toggleMed('${iso}', 'medEvening')">${rec.medEvening ? '✓' : ''}</div>
-        </div>
+        ${i === 0 ? `<div class="med-total">${
+          total == null ? 'сегодня без приёма' : 'сегодня ' + healthjs.formatMg(total)
+        }</div>` : ''}
+        ${slots.map(slot => {
+          const taken = !!flags[slot.id];
+          const list = healthjs.slotMeds(state.meds, slot.id);
+          const sum = healthjs.slotTotalMg(state.meds, slot.id);
+          return `
+            <div class="med-row">
+              <span>💊 ${escapeHtml(slot.label)}${
+                sum ? ` <span class="med-sum">${healthjs.formatMg(sum)}</span>` : ''
+              }</span>
+              <div class="checkbox ${taken ? 'checked' : ''}" role="checkbox"
+                   aria-checked="${taken}" aria-label="${escapeHtml(slot.label)}"
+                   onclick="window.toggleMed('${iso}', '${slot.id}')">${taken ? '✓' : ''}</div>
+            </div>
+            ${list.length ? `<div class="med-names">${
+              list.map(med => escapeHtml(med.name)).join(' + ')
+            }</div>` : ''}
+          `;
+        }).join('')}
       </div>
     `;
     grid.appendChild(card);
@@ -3947,19 +4121,280 @@ function renderHealth() {
 }
 
 function setHealthState(iso, s) {
-  if (!state.health[iso]) state.health[iso] = { state: null, medMorning: false, medEvening: false };
-  state.health[iso].state = (state.health[iso].state === s) ? null : s;
+  const rec = ensureHealthDay(iso);
+  rec.state = (rec.state === s) ? null : s;
+  stampHealthDay(rec);
   saveState();
   renderHealth();
   drawHealthChart();
 }
 
+/* Ключ может прийти старым (medMorning) из разметки, закэшированной до v15 */
 function toggleMed(iso, key) {
-  if (!state.health[iso]) state.health[iso] = { state: null, medMorning: false, medEvening: false };
-  state.health[iso][key] = !state.health[iso][key];
+  const slot = healthjs.slotFromKey(key);
+  if (!slot) return;
+  const rec = ensureHealthDay(iso);
+  rec.meds[slot] = !rec.meds[slot];
+  stampHealthDay(rec);
   saveState();
   renderHealth();
+  drawMedChart();
 }
+
+/* ---------- Справочник лекарств ---------- */
+
+/* Какую строку правим: id или null, когда добавляем новую */
+let editingMedId = null;
+
+function medSlotOptions(selected) {
+  return healthjs.MED_SLOTS.map(slot =>
+    `<option value="${slot.id}"${slot.id === selected ? ' selected' : ''}>${slot.label}</option>`
+  ).join('');
+}
+
+/* 0 мг показываем нулём: в итогах «—» читается как «нет данных» */
+function mgText(value) {
+  return value ? healthjs.formatMg(value) : '0 мг';
+}
+
+function renderMeds() {
+  const table = document.getElementById('medsTable');
+  const foot = document.getElementById('medFoot');
+  const select = document.getElementById('medSlot');
+  if (select && !select.options.length) select.innerHTML = medSlotOptions(null);
+  const list = healthjs.sortMeds(state.meds);
+  if (table) {
+    table.innerHTML = list.length ? `
+      <table>
+        <thead>
+          <tr><th>Препарат</th><th>Доза</th><th>Приём</th><th style="width:118px;"></th></tr>
+        </thead>
+        <tbody>
+          ${list.map(med => `
+            <tr class="${med.active ? '' : 'med-off'}">
+              <td>${escapeHtml(med.name)}</td>
+              <td class="med-sum">${healthjs.formatMg(med.doseMg)}</td>
+              <td>${escapeHtml(healthjs.slotLabel(med.slot))}</td>
+              <td class="actions-cell">
+                <button class="ghost mini" data-med-action="edit" data-med-id="${escapeHtml(med.id)}"
+                  title="Изменить" aria-label="Изменить">✏️</button>
+                <button class="ghost mini" data-med-action="toggle" data-med-id="${escapeHtml(med.id)}"
+                  title="${med.active ? 'Не принимать' : 'Снова принимать'}"
+                  aria-label="${med.active ? 'Не принимать' : 'Снова принимать'}">${
+                  med.active ? '⏸' : '▶'
+                }</button>
+                <button class="ghost mini" data-med-action="remove" data-med-id="${escapeHtml(med.id)}"
+                  title="Удалить" aria-label="Удалить">🗑</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    ` : '<div class="empty">Справочник пуст: добавьте препарат — в дневнике появятся слоты приёма</div>';
+  }
+  /* Итоги по слотам: сразу видно, сколько набегает за сутки */
+  if (foot) {
+    if (!list.length) {
+      foot.innerHTML = '';
+    } else {
+      const perSlot = healthjs.visibleSlots(state.meds).map(slot =>
+        `<span>${escapeHtml(slot.label)}: <b>${mgText(healthjs.slotTotalMg(state.meds, slot.id))}</b></span>`
+      ).join('');
+      foot.innerHTML = `${perSlot}<span>За сутки: <b>${mgText(healthjs.dailyTotalMg(state.meds))}</b></span>`;
+    }
+  }
+}
+
+function resetMedForm() {
+  editingMedId = null;
+  const name = document.getElementById('medName');
+  const dose = document.getElementById('medDose');
+  const submit = document.getElementById('medSubmit');
+  const cancel = document.getElementById('medCancel');
+  if (name) name.value = '';
+  if (dose) dose.value = '100';
+  if (submit) submit.textContent = 'Добавить';
+  if (cancel) cancel.hidden = true;
+}
+
+function editMed(id) {
+  const med = healthjs.normalizeMedList(state.meds).find(item => item.id === id);
+  if (!med) return;
+  editingMedId = med.id;
+  const name = document.getElementById('medName');
+  const dose = document.getElementById('medDose');
+  const slot = document.getElementById('medSlot');
+  if (name) { name.value = med.name; name.focus(); }
+  if (dose) dose.value = med.doseMg || 100;
+  if (slot) slot.value = med.slot;
+  if (document.getElementById('medSubmit')) document.getElementById('medSubmit').textContent = 'Сохранить';
+  if (document.getElementById('medCancel')) document.getElementById('medCancel').hidden = false;
+}
+
+function saveMedForm(event) {
+  if (event) event.preventDefault();
+  const nameEl = document.getElementById('medName');
+  const doseEl = document.getElementById('medDose');
+  const slotEl = document.getElementById('medSlot');
+  if (!nameEl || !doseEl || !slotEl) return;
+  const name = (nameEl.value || '').trim();
+  const doseMg = healthjs.normalizeDose(doseEl.value);
+  const slot = healthjs.slotFromKey(slotEl.value) || healthjs.MED_SLOTS[0].id;
+  if (!name) { toast('Введите название препарата', 'bad'); nameEl.focus(); return; }
+  if (!doseMg) { toast('Доза должна быть больше нуля', 'bad'); doseEl.focus(); return; }
+  const now = new Date().toISOString();
+  if (editingMedId) {
+    const med = state.meds.find(item => item.id === editingMedId);
+    if (med) Object.assign(med, { name, doseMg, slot, updatedAt: now });
+    toast('Препарат обновлён', 'ok');
+  } else {
+    state.meds.push({ id: uid(), name, doseMg, slot, active: true, createdAt: now, updatedAt: now });
+    toast('Препарат добавлен', 'ok');
+  }
+  resetMedForm();
+  saveState();
+  renderMeds();
+  renderHealth();
+  drawMedChart();
+}
+
+/* Снятый с приёма препарат остаётся в справочнике: история доз не переписывается */
+function toggleMedActive(id) {
+  const med = state.meds.find(item => item.id === id);
+  if (!med) return;
+  const turnOn = med.active === false;
+  med.active = turnOn;
+  med.updatedAt = new Date().toISOString();
+  saveState();
+  renderMeds();
+  renderHealth();
+  drawMedChart();
+  toast(turnOn ? 'Препарат снова в приёме' : 'Препарат снят с приёма', 'ok');
+}
+
+function removeMed(id) {
+  const med = state.meds.find(item => item.id === id);
+  if (!med) return;
+  if (!confirm('Удалить «' + med.name + '» из справочника?')) return;
+  state.meds = state.meds.filter(item => item.id !== id);
+  if (editingMedId === id) resetMedForm();
+  saveState();
+  renderMeds();
+  renderHealth();
+  drawMedChart();
+  toast('Препарат удалён', 'ok');
+}
+
+window.saveMedForm = saveMedForm;
+window.cancelMedEdit = resetMedForm;
+window.editMed = editMed;
+window.toggleMedActive = toggleMedActive;
+window.removeMed = removeMed;
+
+/* ---------- Подвкладки «Здоровья» ----------
+   Дневник и справочник живут на одной вкладке: строка вкладок не распухает,
+   а связь между ними видна сразу. */
+let healthTab = 'diary';
+
+function setHealthTab(name) {
+  healthTab = name === 'meds' ? 'meds' : 'diary';
+  const diaryTab = document.getElementById('healthDiaryTab');
+  const medsTab = document.getElementById('healthMedsTab');
+  if (diaryTab) diaryTab.hidden = healthTab !== 'diary';
+  if (medsTab) medsTab.hidden = healthTab !== 'meds';
+  document.querySelectorAll('#healthSubtabs .subtab').forEach(el => {
+    el.classList.toggle('active', el.dataset.healthView === healthTab);
+  });
+  if (healthTab === 'meds') {
+    renderMeds();
+    return;
+  }
+  renderHealth();
+  /* Графики рисуем после показа: у скрытого блока ширина 0, и canvas остался бы пустым */
+  requestAnimationFrame(() => {
+    drawHealthChart();
+    drawMedChart();
+  });
+}
+window.setHealthTab = setHealthTab;
+
+document.querySelectorAll('#healthSubtabs .subtab').forEach(el => {
+  el.addEventListener('click', () => setHealthTab(el.dataset.healthView));
+});
+
+/* Кнопки строк справочника: один обработчик на таблицу, чтобы название препарата
+   с кавычками не попадало внутрь onclick-строки */
+const medsTableEl = document.getElementById('medsTable');
+if (medsTableEl) {
+  medsTableEl.addEventListener('click', event => {
+    const btn = event.target.closest('[data-med-action]');
+    if (!btn) return;
+    const id = btn.dataset.medId;
+    const action = btn.dataset.medAction;
+    if (action === 'edit') editMed(id);
+    else if (action === 'toggle') toggleMedActive(id);
+    else if (action === 'remove') removeMed(id);
+  });
+}
+
+/* ---------- Меню разделов ☰ ----------
+   Повторяет строку вкладок: на телефоне она уезжает за край экрана, и до
+   последних разделов не добраться. */
+function renderViewsMenu() {
+  const panel = document.getElementById('viewsPanel');
+  if (!panel) return;
+  panel.innerHTML = Array.from(document.querySelectorAll('.tab')).map(tab => {
+    const parts = (tab.textContent || '').trim().split(/\s+/);
+    const icon = parts.length > 1 ? parts[0] : '•';
+    const label = parts.length > 1 ? parts.slice(1).join(' ') : (tab.textContent || '').trim();
+    return `
+      <button class="views-item${tab.classList.contains('active') ? ' active' : ''}"
+              role="menuitem" data-view="${escapeHtml(tab.dataset.view || '')}">
+        <span class="views-icon">${escapeHtml(icon)}</span>
+        <span>${escapeHtml(label)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function closeViewsMenu() {
+  const panel = document.getElementById('viewsPanel');
+  const btn = document.getElementById('btnViews');
+  if (panel) panel.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+window.toggleViewsMenu = function (event) {
+  if (event) event.stopPropagation();
+  const panel = document.getElementById('viewsPanel');
+  const btn = document.getElementById('btnViews');
+  if (!panel) return;
+  if (!panel.hidden) {
+    closeViewsMenu();
+    return;
+  }
+  renderViewsMenu();
+  panel.hidden = false;
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+};
+
+document.addEventListener('click', event => {
+  const panel = document.getElementById('viewsPanel');
+  if (!panel || panel.hidden) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const item = target.closest('.views-item');
+  if (item) {
+    closeViewsMenu();
+    switchView(item.dataset.view);
+    return;
+  }
+  if (!target.closest('#viewsMenu')) closeViewsMenu();
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeViewsMenu();
+});
 
 /* ============================================================
    ГРАФИК
@@ -3978,6 +4413,24 @@ document.querySelectorAll('#chartSeg button').forEach(btn => {
 function getChartDays() {
   if (chartRange === 'month') return 30;
   if (chartRange === 'quarter') return 90;
+  return 365;
+}
+
+/* Своё окно для графика приёма: таблетки удобно смотреть за другой период, чем состояние */
+let medChartRange = 'month';
+
+document.querySelectorAll('#medChartSeg button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#medChartSeg button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    medChartRange = btn.dataset.range;
+    drawMedChart();
+  });
+});
+
+function getMedChartDays() {
+  if (medChartRange === 'month') return 30;
+  if (medChartRange === 'quarter') return 90;
   return 365;
 }
 
@@ -4132,11 +4585,123 @@ function drawPoint(ctx, x, y, state, colors, isMobile) {
   ctx.stroke();
 }
 
+/* Столбики по дням: высота — сумма выпитого за день. День без отметок — не «0 мг»,
+   а «приём не отмечен», поэтому он остаётся пустым и график не врёт. */
+function drawMedChart() {
+  const canvas = document.getElementById('medChart');
+  if (!canvas) return;
+  const wrap = canvas.parentElement;
+  const cssWidth = wrap ? wrap.clientWidth : 0;
+  if (!cssWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const isMobile = window.matchMedia('(max-width: 640px)').matches;
+  const cssHeight = isMobile ? 200 : 240;
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  canvas.style.width = cssWidth + 'px';
+  canvas.style.height = cssHeight + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const cs = getComputedStyle(document.documentElement);
+  const colBorder = cs.getPropertyValue('--border').trim();
+  const colMuted = cs.getPropertyValue('--muted').trim();
+  const colAccent = cs.getPropertyValue('--accent').trim();
+  const colPanel = cs.getPropertyValue('--panel').trim();
+  const font = isMobile ? '10px -apple-system, sans-serif' : '11px -apple-system, sans-serif';
+
+  const days = getMedChartDays();
+  const series = healthjs.medSeries(state.health, state.meds, todayISO(), days);
+  const maxTaken = series.reduce((max, p) => (p.mg != null && p.mg > max ? p.mg : max), 0);
+  const ceiling = healthjs.chartCeiling(maxTaken);
+  const ticks = healthjs.chartTicks(ceiling);
+  const labelEvery = healthjs.tickLabelEvery(ceiling);
+
+  const padL = isMobile ? 38 : 48;
+  const padR = 12;
+  const padT = 16;
+  const padB = isMobile ? 26 : 32;
+  const plotW = Math.max(1, cssWidth - padL - padR);
+  const plotH = Math.max(1, cssHeight - padT - padB);
+  const yOf = mg => padT + plotH - (mg / ceiling) * plotH;
+
+  /* Сетка и подписи по оси Y (мг) */
+  ctx.strokeStyle = colBorder;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  ticks.forEach(tick => {
+    const y = yOf(tick);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = colMuted;
+  ctx.font = font;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ticks.forEach(tick => {
+    if (tick % labelEvery !== 0 && tick !== ceiling) return;
+    ctx.fillText(String(tick), padL - 6, yOf(tick));
+  });
+
+  /* Подписи по оси X: даты, а на длинном окне — месяцы */
+  const step = plotW / series.length;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const labelStep = Math.max(1, Math.floor(days / (isMobile ? 5 : 8)));
+  series.forEach((point, i) => {
+    if (i % labelStep !== 0) return;
+    const d = fromISO(point.iso);
+    const label = days > 60
+      ? MONTH_SHORT[d.getMonth()]
+      : `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+    ctx.fillText(label, padL + step * (i + 0.5), padT + plotH + 6);
+  });
+
+  /* Столбики: последний день (сегодня) ярче. День с отметкой, но без дозы в
+     справочнике, показываем низкой засечкой — видно, что приём отмечен */
+  const barW = Math.max(1, step * 0.62);
+  const today = todayISO();
+  series.forEach((point, i) => {
+    if (point.mg == null) return;
+    const x = padL + step * (i + 0.5) - barW / 2;
+    const y = yOf(point.mg);
+    const h = Math.max(2, padT + plotH - y);
+    ctx.fillStyle = colAccent;
+    ctx.globalAlpha = point.iso === today ? 1 : 0.55;
+    ctx.beginPath();
+    ctx.rect(x, padT + plotH - h, barW, h);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = colPanel;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  const legend = document.getElementById('medChartLegend');
+  if (legend) {
+    const marked = series.filter(point => point.mg != null).length;
+    legend.innerHTML =
+      '<span><span class="dot" style="background:var(--accent)"></span>Выпито за день</span>' +
+      `<span>Ось: 0…${ceiling} мг</span>` +
+      (marked ? `<span>Отмечено дней: ${marked} из ${series.length}</span>`
+              : '<span>Отметьте приём в дневнике — столбики появятся здесь</span>');
+  }
+}
+
 let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    if (document.getElementById('view-health').classList.contains('active')) drawHealthChart();
+    if (document.getElementById('view-health').classList.contains('active')) {
+      drawHealthChart();
+      drawMedChart();
+    }
   }, 150);
 });
 
@@ -5141,7 +5706,7 @@ function applyImported(data) {
     return;
   }
   const payload = data.state && typeof data.state === 'object' ? data.state : data;
-  const known = ['tasks', 'kanbanCards', 'events', 'projects', 'works', 'programs', 'health', 'messages'];
+  const known = ['tasks', 'kanbanCards', 'events', 'projects', 'works', 'programs', 'health', 'meds', 'messages'];
   if (!known.some(k => payload[k] !== undefined)) {
     toast('В файле нет данных планера', 'bad');
     return;
@@ -5538,7 +6103,9 @@ function renderAll() {
   renderHobbies();
   renderChat();
   renderHealth();
+  renderMeds();
   drawHealthChart();
+  drawMedChart();
 }
 
 /* ============================================================

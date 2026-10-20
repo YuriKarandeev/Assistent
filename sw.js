@@ -7,7 +7,7 @@
    старые. Поэтому при установке запрашиваем с cache: 'reload' (в обход
    HTTP-кэша), а фоновое обновление — с cache: 'no-cache' (ревалидация,
    но без повторной загрузки неизменившегося файла). */
-const CACHE_NAME = 'assistant-planer-v14';
+const CACHE_NAME = 'assistant-planer-v15';
 
 const SHELL = [
   './',
@@ -16,6 +16,7 @@ const SHELL = [
   './ai.js',
   './voice.js',
   './push.js',
+  './health.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
